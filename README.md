@@ -8,6 +8,7 @@ records in the author's own repo.
 - [docs/0001-design.md](docs/0001-design.md): the design.
 - [docs/deck.html](docs/deck.html): the design as slides, with mockups.
 - [docs/0002-deploy.md](docs/0002-deploy.md): deploying to the droplet.
+- [docs/0003-m1.md](docs/0003-m1.md): the M1 plan, sign-in.
 - [lexicons/at/threaded/](lexicons/at/threaded/): the submission, comment, and
   public vote schemas.
 

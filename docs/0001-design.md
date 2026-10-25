@@ -51,7 +51,7 @@ Client metadata:
   "grant_types": ["authorization_code", "refresh_token"],
   "response_types": ["code"],
   "redirect_uris": ["https://threaded.at/oauth/callback"],
-  "scope": "atproto repo:at.threaded.submission repo:at.threaded.comment repo:at.threaded.vote repo:app.bsky.feed.post?action=create",
+  "scope": "atproto repo:at.threaded.submission repo:at.threaded.comment repo:at.threaded.vote?action=create&action=delete repo:app.bsky.feed.post?action=create",
   "token_endpoint_auth_method": "private_key_jwt",
   "token_endpoint_auth_signing_alg": "ES256",
   "jwks_uri": "https://threaded.at/oauth/jwks.json",
@@ -61,18 +61,22 @@ Client metadata:
 
 ### 2.2 Scopes
 
-Metadata declares every scope Threaded might request. Each sign-in requests
-only what it needs.
+Threaded asks for the least it needs. Metadata declares every scope a sign-in
+might request; each sign-in requests only the scopes for features that exist
+and that the user has turned on. The metadata grows with the milestones: in M1
+it declares `atproto` alone.
 
-| Scope | Requested | Grants |
-|---|---|---|
-| `atproto` | Always | Identity. Required by the spec. |
-| `repo:at.threaded.submission` | Always | Create, update, delete the user's submissions. |
-| `repo:at.threaded.comment` | Always | Same for comments. |
-| `repo:at.threaded.vote` | When the user makes upvotes public | Create and delete the user's public upvotes. |
-| `repo:app.bsky.feed.post?action=create` | When the user turns on cross-posting | Create a Bluesky post announcing a submission. |
+| Scope | Requested | Grants | From |
+|---|---|---|---|
+| `atproto` | Every sign-in | Identity only. Required by the spec. | M1 |
+| `repo:at.threaded.submission` | Every sign-in | Create, update (edits), and delete the user's submissions | M2 |
+| `repo:at.threaded.comment` | Every sign-in | The same for comments | M2 |
+| `repo:at.threaded.vote?action=create&action=delete` | When the user makes upvotes public | Create and delete public upvotes; votes are never edited | M2 |
+| `repo:app.bsky.feed.post?action=create` | When the user turns on cross-posting | Create Bluesky posts. It cannot be narrowed further, so it stays opt-in. | M5 |
 
-Turning on public upvotes or cross-posting runs a second authorization with the larger scope set.
+Threaded never requests `transition:generic` (full account access), or any
+`blob`, `rpc`, `account`, or `identity` scope. Turning on public upvotes or
+cross-posting runs a second authorization with the larger scope set.
 
 ### 2.3 Rules the callback enforces
 
@@ -97,7 +101,7 @@ Threaded supplies a SQLite-backed `ClientAuthStore`.
 The spec's localhost exception gives a public client with no hosted metadata:
 
 ```text
-client_id = http://localhost?redirect_uri=http%3A%2F%2F127.0.0.1%3A8080%2Foauth%2Fcallback&scope=atproto%20repo%3Aat.threaded.submission%20repo%3Aat.threaded.comment
+client_id = http://localhost/?redirect_uri=http%3A%2F%2F127.0.0.1%3A8080%2Foauth%2Fcallback&scope=atproto
 ```
 
 The redirect host must be `127.0.0.1` or `[::1]`; ports are not matched. Dev
