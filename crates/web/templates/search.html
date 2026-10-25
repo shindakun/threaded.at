@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Search | {{ site }}{% endblock %}
+{% block main %}
+<h1 class="vh">Search</h1>
+<form class="search" action="/search" method="get" role="search">
+  <label class="vh" for="q">Search stories</label>
+  <input type="search" id="q" name="q" value="{{ q }}" aria-describedby="search-hint">
+  <button type="submit">Search</button>
+</form>
+<p class="hint" id="search-hint"><code>"exact phrase"</code> <code>-word</code> <code>tag:rust</code> <code>-tag:job</code> <code>domain:example.com</code> <code>submitter:handle</code> <code>commenter:handle</code> <code>title:word</code> <code>sort:new</code> <code>sort:score</code></p>
+{% if searched %}
+{% if stories.is_empty() %}
+<p class="empty">No results.</p>
+{% else %}
+<ol class="stories">
+{% for s in stories %}{% include "story_row.html" %}{% endfor %}
+</ol>
+{% endif %}
+{% endif %}
+{% endblock %}

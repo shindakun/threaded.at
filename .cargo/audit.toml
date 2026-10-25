@@ -1,0 +1,5 @@
+[advisories]
+# rsa is in Cargo.lock only through sqlx-mysql, which sqlx's lockfile lists
+# even when only the sqlite driver is enabled. It is never compiled:
+# `cargo tree --workspace -e all --target all` does not contain it.
+ignore = ["RUSTSEC-2023-0071"]

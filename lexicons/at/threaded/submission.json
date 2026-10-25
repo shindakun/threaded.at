@@ -1,0 +1,58 @@
+{
+  "lexicon": 1,
+  "id": "at.threaded.submission",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A link or text post submitted for discussion. Any aggregator may index it under its own rules.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["title", "createdAt"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 1500,
+            "maxGraphemes": 150
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The linked page. Absent on text-only posts."
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 20000,
+            "maxGraphemes": 5000,
+            "description": "Body in CommonMark. Absent or empty on link-only posts."
+          },
+          "tags": {
+            "type": "array",
+            "maxLength": 5,
+            "items": {
+              "type": "string",
+              "maxLength": 25
+            },
+            "description": "Lowercase topic tags. Each aggregator maps them to its own tag set and ignores the rest."
+          },
+          "authored": {
+            "type": "boolean",
+            "description": "The submitter claims to be the author of the linked page."
+          },
+          "langs": {
+            "type": "array",
+            "maxLength": 3,
+            "items": {
+              "type": "string",
+              "format": "language"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} | {{ site }}{% endblock %}
+{% block main %}
+<h1{% if hide_heading %} class="vh"{% endif %}>{{ heading }}</h1>
+{% if stories.is_empty() %}
+<p class="empty">No stories.</p>
+{% else %}
+<ol class="stories">
+{% for s in stories %}{% include "story_row.html" %}{% endfor %}
+</ol>
+{% endif %}
+{% if prev.is_some() || next.is_some() %}
+<nav class="pager" aria-label="Pages">
+  {% if let Some(p) = prev %}<a href="{{ p }}" rel="prev">Previous: page {{ page - 1 }}</a>{% endif %}
+  {% if let Some(n) = next %}<a href="{{ n }}" rel="next">Next: page {{ page + 1 }}</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

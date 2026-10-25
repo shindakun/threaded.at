@@ -1,0 +1,17 @@
+{
+  "config": {
+    "default": true,
+    // long lines are fine in prose and tables
+    "MD013": false,
+    // placeholders like <name> in prose are not HTML
+    "MD033": false,
+    // bold lead-ins label paragraphs, they are not headings
+    "MD036": false,
+    // the first line of a doc is not always an H1
+    "MD041": false,
+    // compact |---|---| tables
+    "MD060": false
+  },
+  "globs": ["**/*.md"],
+  "ignores": ["target/**", "**/node_modules/**"]
+}

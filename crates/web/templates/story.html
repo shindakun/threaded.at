@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}{{ s.title }} | {{ site }}{% endblock %}
+{% block main %}
+<h1 class="vh">{{ s.title }}</h1>
+<ol class="stories">{% include "story_row.html" %}</ol>
+{% endblock %}

@@ -1,0 +1,1380 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Threaded: design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=JetBrains+Mono:wght@400;700&display=swap">
+
+<style>
+/* ============================================================
+   TOKENS
+   Replace this palette per deck. Rules:
+   - :root defines the COMPLETE light palette.
+   - The dark blocks redefine ONLY tokens, never component rules.
+   - Both dark blocks must define the SAME token set.
+   - Never declare a color solely inside a media/[data-theme] block.
+   ============================================================ */
+:root {
+  --ground:      #F7F5F0;
+  --panel:       #FFFFFF;
+  --panel-2:     #EFECE4;
+  --ink:         #1C1C1A;
+  --ink-soft:    #4B4A45;
+  --muted:       #77756C;
+  --rule:        #DFDCD2;
+  --rule-strong: #C6C2B5;
+
+  --accent:      #A2421F;
+  --accent-soft: #F6E3D9;
+  --accent-ink:  #7A2F14;
+
+  --warn:        #96601F;
+  --warn-soft:   #F6EBDA;
+  --crit:        #9A342B;
+  --crit-soft:   #F7E3E0;
+  --ok:          #2F6B4F;
+  --ok-soft:     #DFEDE6;
+
+  --tag-bg:      #EFE6D6;
+  --tag-ink:     #6B5428;
+
+  --shadow: 0 1px 2px rgba(26,29,26,.05), 0 8px 24px -12px rgba(26,29,26,.18);
+
+  --display: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  --body:    "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:      #121316;
+    --panel:       #1A1C20;
+    --panel-2:     #23262B;
+    --ink:         #ECEAE4;
+    --ink-soft:    #C0BDB4;
+    --muted:       #8D8A82;
+    --rule:        #2C2F35;
+    --rule-strong: #42464E;
+
+    --accent:      #F08A5D;
+    --accent-soft: #3A2418;
+    --accent-ink:  #F6AE8C;
+
+    --warn:        #E0B062;
+    --warn-soft:   #33291A;
+    --crit:        #EF8A80;
+    --crit-soft:   #3A1F1D;
+    --ok:          #86C9A3;
+    --ok-soft:     #1B2F25;
+
+    --tag-bg:      #2A2620;
+    --tag-ink:     #D8BF8A;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground:      #121316;
+  --panel:       #1A1C20;
+  --panel-2:     #23262B;
+  --ink:         #ECEAE4;
+  --ink-soft:    #C0BDB4;
+  --muted:       #8D8A82;
+  --rule:        #2C2F35;
+  --rule-strong: #42464E;
+
+  --accent:      #F08A5D;
+  --accent-soft: #3A2418;
+  --accent-ink:  #F6AE8C;
+
+  --warn:        #E0B062;
+  --warn-soft:   #33291A;
+  --crit:        #EF8A80;
+  --crit-soft:   #3A1F1D;
+  --ok:          #86C9A3;
+  --ok-soft:     #1B2F25;
+
+  --tag-bg:      #2A2620;
+  --tag-ink:     #D8BF8A;
+
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
+}
+
+* { box-sizing: border-box; }
+
+/* body must not scroll; #deck owns scrolling so snap works */
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ============================================================
+   DECK MECHANICS  --  do not replace with show/hide JS.
+   Slides all live in the document; the browser moves between
+   them. Two-finger trackpad swipe works because it is real
+   scrolling. Intercepting 'wheel' breaks this.
+   ============================================================ */
+#deck {
+  height: 100vh;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+}
+
+.slide {
+  min-height: 100vh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 32px 96px;
+}
+
+.slide > .inner {
+  width: 100%;
+  max-width: 1080px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #deck { scroll-behavior: auto; }
+  * { transition: none !important; }
+}
+
+.progress {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  width: 0;
+  background: var(--accent);
+  z-index: 60;
+  transition: width 120ms linear;
+}
+@media (prefers-reduced-motion: reduce) { .progress { transition: none; } }
+
+@media print {
+  body { overflow: visible; }
+  #deck { height: auto; overflow: visible; }
+  .slide { min-height: auto; page-break-after: always; }
+  .bar, .progress { display: none; }
+}
+
+/* ---------- bottom rail ---------- */
+
+.bar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  background: color-mix(in srgb, var(--ground) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--rule);
+  z-index: 20;
+}
+
+.bar-title {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bar-title span { color: var(--muted); font-weight: 400; }
+
+.dots { display: flex; gap: 4px; margin-left: auto; align-items: center; }
+
+/* Button is the hit target; the visible bar is a pseudo-element.
+   Styling the button itself to 5px tall leaves it unclickable. */
+.dot {
+  width: 22px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.dot::after {
+  content: "";
+  display: block;
+  width: 20px;
+  height: 5px;
+  border-radius: 2px;
+  background: var(--rule-strong);
+  transition: background .18s, height .18s;
+}
+.dot:hover::after { background: var(--muted); height: 7px; }
+.dot[aria-current="true"]::after { background: var(--accent); height: 7px; }
+.dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 4px; }
+
+.arrows { display: flex; gap: 6px; }
+
+.arrow {
+  width: 30px; height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color .18s, background .18s;
+}
+.arrow:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.arrow:disabled { opacity: .35; cursor: default; }
+.arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.count {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- type ---------- */
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 14px;
+}
+
+h1 {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(38px, 6.4vw, 68px);
+  line-height: 1.03;
+  letter-spacing: -.025em;
+  margin: 0 0 18px;
+  text-wrap: balance;
+}
+
+h2 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(26px, 3.6vw, 38px);
+  line-height: 1.12;
+  letter-spacing: -.018em;
+  margin: 0 0 10px;
+  text-wrap: balance;
+}
+
+h3 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 17px;
+  margin: 0 0 6px;
+}
+
+.lede {
+  font-size: clamp(16px, 1.9vw, 19px);
+  color: var(--ink-soft);
+  max-width: 62ch;
+  margin: 0 0 26px;
+  text-wrap: pretty;
+}
+
+.sub { color: var(--muted); max-width: 68ch; margin: 0 0 24px; }
+
+p { text-wrap: pretty; }
+
+code, .mono { font-family: var(--mono); font-size: .88em; }
+
+code {
+  background: var(--panel-2);
+  padding: .12em .4em;
+  border-radius: 4px;
+  color: var(--accent-ink);
+}
+
+.sec-head { margin-bottom: 20px; }
+.footnote { margin-top: 22px; font-size: 13px; color: var(--muted); font-family: var(--mono); }
+
+/* ---------- content blocks ---------- */
+
+.grid { display: grid; gap: 14px; }
+.g2 { grid-template-columns: repeat(2, 1fr); }
+.g3 { grid-template-columns: repeat(3, 1fr); }
+.g4 { grid-template-columns: repeat(4, 1fr); }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+}
+.card p { margin: 0; color: var(--ink-soft); font-size: 14.5px; }
+.card p + p { margin-top: 8px; }
+
+.stat .n {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 38px;
+  line-height: 1;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+  display: block;
+  margin-bottom: 5px;
+}
+.stat .k {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: block;
+}
+.stat.pos .n  { color: var(--ok); }
+.stat.neg .n  { color: var(--crit); }
+.stat.warn .n { color: var(--warn); }
+
+/* severity stripe: encodes state in form, not color alone */
+.striped { position: relative; padding-left: 22px; overflow: hidden; }
+.striped::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; }
+.striped.hard::before { background: var(--crit); }
+.striped.med::before  { background: var(--warn); }
+.striped.ok::before   { background: var(--ok); }
+
+.tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-bottom: 9px;
+}
+.tag.hard { background: var(--crit-soft); color: var(--crit); }
+.tag.med  { background: var(--warn-soft); color: var(--warn); }
+.tag.ok   { background: var(--ok-soft);   color: var(--ok); }
+.tag.neu  { background: var(--panel-2);   color: var(--muted); }
+
+/* wide content scrolls inside its own box, never the page body */
+.tw { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--panel); }
+
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 560px; }
+
+th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 400;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+
+td { padding: 10px 16px; border-bottom: 1px solid var(--rule); color: var(--ink-soft); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+td:first-child { color: var(--ink); font-weight: 500; }
+/* Numeric columns. The header MUST carry .num too: a right-aligned figure
+   under a left-aligned label reads as a broken column, and it is the easiest
+   thing in a deck to leave half-done. Put .num on the th and every td in
+   that column. */
+td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
+td.num { font-family: var(--mono); }
+
+/* Row stripe encodes state in form as well as color, so a table still reads
+   when the hue does not. */
+tr.yes td:first-child { box-shadow: inset 3px 0 0 var(--ok); }
+tr.no  td:first-child { box-shadow: inset 3px 0 0 var(--crit); }
+
+.pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.pill.y { background: var(--ok-soft);   color: var(--ok); }
+.pill.n { background: var(--crit-soft); color: var(--crit); }
+.pill.m { background: var(--warn-soft); color: var(--warn); }
+
+/* ---------- numbered / labelled steps ---------- */
+
+.steps { display: grid; gap: 10px; }
+
+/* Grid rather than flex so every row's index column lines up, however long
+   the label is. The third column collapses when a row has no effort tag. */
+.step {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 16px;
+  align-items: baseline;
+  padding: 15px 18px;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--rule-strong);
+  border-radius: 8px;
+  transition: border-left-color .18s;
+}
+
+.step:hover { border-left-color: var(--accent); }
+
+/* .now marks the step the reader should act on, so the accent means something
+   rather than decorating every row. */
+.step.now { border-left-color: var(--accent); background: var(--accent-soft); }
+
+.step .idx {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 3.5ch;
+  padding-top: 1px;
+}
+
+.step.now .idx { color: var(--accent-ink); }
+
+.step h3 { margin: 0 0 4px; }
+.step p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ink-soft); }
+
+.step .effort {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  padding: 3px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+}
+
+@media (max-width: 720px) {
+  /* Stack rather than squeeze: three columns on a narrow screen leaves the
+     description a few characters wide. */
+  .step { grid-template-columns: 1fr; gap: 6px; }
+  .step .effort { justify-self: start; }
+}
+
+.note {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 14px 18px;
+  border-radius: 0 8px 8px 0;
+  font-size: 14.5px;
+  color: var(--accent-ink);
+  margin-top: 20px;
+}
+.note.warnbox { border-left-color: var(--warn); background: var(--warn-soft); color: var(--warn); }
+
+@media (max-width: 900px) {
+  .g4 { grid-template-columns: repeat(2, 1fr); }
+  .g3, .g2 { grid-template-columns: 1fr; }
+  .slide { padding: 28px 18px 92px; }
+  .bar-title { display: none; }
+}
+
+/* ---------- deck-specific layout ---------- */
+
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+.split.wide-left { grid-template-columns: 1.35fr 1fr; }
+
+pre.code {
+  margin: 0;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  overflow-x: auto;
+}
+pre.code .k { color: var(--accent); }
+pre.code .c { color: var(--muted); }
+
+ul.plain { margin: 0; padding-left: 18px; color: var(--ink-soft); font-size: 14.5px; }
+ul.plain li + li { margin-top: 6px; }
+
+/* ---------- product mockups ---------- */
+
+.frame {
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+.frame-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--rule);
+}
+.fd { width: 10px; height: 10px; border-radius: 50%; background: var(--rule-strong); display: inline-block; }
+.url {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 3px 10px;
+}
+.frame-body { padding: 0 0 12px; font-size: 13.5px; }
+
+.m-top {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+.m-brand { font-weight: 700; color: var(--accent); }
+.m-nav { display: flex; gap: 12px; color: var(--ink-soft); font-size: 12.5px; }
+.m-nav .on { color: var(--ink); text-decoration: underline; }
+.m-user { margin-left: auto; font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+.m-list { list-style: none; margin: 0; padding: 6px 16px 0; }
+.m-story { display: grid; grid-template-columns: 2.6em 1fr; gap: 10px; padding: 6px 0; }
+.m-score {
+  text-align: right;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.9;
+}
+.m-score.up { color: var(--accent); }
+.m-title { font-weight: 600; color: var(--ink); margin-right: 4px; }
+.m-tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 0 6px;
+  margin-right: 3px;
+  border-radius: 3px;
+  background: var(--tag-bg);
+  color: var(--tag-ink);
+}
+.m-tag.media { border: 1px solid var(--tag-ink); background: transparent; }
+.m-dom { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.m-meta { font-size: 11.5px; color: var(--muted); }
+.m-meta b { color: var(--ink-soft); font-weight: 500; }
+.m-new { color: var(--ok); font-weight: 700; }
+.m-ribbon { color: var(--accent); font-weight: 700; }
+
+.m-text { padding: 4px 16px 0 calc(16px + 2.6em + 10px); color: var(--ink-soft); font-size: 13px; }
+
+.m-comment { padding: 8px 16px 0 16px; border-left: 2px solid var(--rule); margin-left: 16px; }
+.m-comment.d2 { margin-left: 40px; }
+.m-comment.d3 { margin-left: 64px; }
+.m-comment p { margin: 3px 0 0; color: var(--ink-soft); font-size: 13px; }
+.m-badge {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 0 6px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  color: var(--ink-soft);
+}
+.m-actions { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.m-flagmenu {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border: 1px solid var(--warn);
+  border-radius: 5px;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.m-search { display: flex; gap: 8px; padding: 12px 16px 4px; }
+.m-input {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--panel-2);
+}
+.m-btn {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--ground);
+}
+.m-hint { padding: 0 16px 6px; font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.m-hl { background: var(--accent-soft); color: var(--accent-ink); border-radius: 2px; padding: 0 2px; }
+
+.m-log { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 0; }
+.m-log td { padding: 6px 16px; border-bottom: 1px solid var(--rule); color: var(--ink-soft); }
+.m-log td:first-child { font-family: var(--mono); color: var(--muted); font-weight: 400; white-space: nowrap; }
+
+.m-login { padding: 22px 26px 14px; }
+.m-login h3 { margin-bottom: 4px; }
+.m-login .m-input { display: block; margin: 12px 0 10px; }
+.m-small { font-size: 11.5px; color: var(--muted); margin: 8px 0 0; }
+.m-label { display: block; font-size: 12px; font-weight: 700; color: var(--ink); margin-top: 12px; }
+.m-login .m-label + .m-input { margin-top: 4px; }
+.m-suggest { list-style: none; margin: -6px 0 0; padding: 4px; border: 1px solid var(--rule-strong); border-radius: 8px; background: var(--panel); font-size: 12.5px; }
+.m-suggest li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 5px; color: var(--ink-soft); }
+.m-suggest li b { color: var(--ink); font-weight: 600; }
+.m-suggest li.on { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.m-text-block { font-size: 13px; color: var(--ink-soft); margin: 8px 0 0; }
+.m-text-block b, .m-check b { color: var(--ink); }
+.m-check { font-size: 12.5px; margin: 12px 0; padding: 8px 10px; border-left: 3px solid var(--warn); background: var(--warn-soft); color: var(--ink-soft); border-radius: 0 6px 6px 0; }
+.m-link { font-size: 12px; color: var(--accent); text-decoration: underline; margin-left: 10px; }
+.m-av { width: 18px; height: 18px; border-radius: 50%; background: var(--rule-strong); flex-shrink: 0; }
+
+.m-verdict { font-size: 12px; color: var(--ink-soft); margin-top: 4px; padding: 4px 8px; border-left: 2px solid var(--rule-strong); background: var(--panel-2); border-radius: 0 5px 5px 0; }
+.m-verdict.hold { border-left-color: var(--crit); background: var(--crit-soft); color: var(--crit); }
+
+.m-tabs { display: flex; gap: 2px; padding: 8px 16px 0; border-bottom: 1px solid var(--rule); font-size: 12.5px; }
+.m-tab { padding: 6px 10px; color: var(--ink-soft); border-bottom: 2px solid transparent; }
+.m-tab.on { color: var(--ink); font-weight: 700; border-bottom-color: var(--accent); }
+.m-count { font-family: var(--mono); font-size: 11px; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: var(--panel-2); color: var(--ink-soft); }
+.m-tab.on .m-count { background: var(--accent-soft); color: var(--accent-ink); }
+.m-pane { padding: 10px 16px 16px; }
+.m-pane .m-btn { display: inline-block; margin-top: 6px; }
+.m-pane h3 { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 12px 0 4px; font-weight: 400; }
+.m-pane h3:first-child { margin-top: 0; }
+.m-pane p { margin: 2px 0; font-size: 12.5px; color: var(--ink-soft); }
+.m-pane b { color: var(--ink); font-weight: 600; }
+.m-field { display: block; margin: 6px 0; padding: 6px 8px; font-size: 12px; color: var(--muted); border: 1px solid var(--rule-strong); border-radius: 6px; background: var(--panel-2); }
+.m-btn.quiet { background: var(--panel-2); color: var(--ink); border: 1px solid var(--rule-strong); }
+.m-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 12px 16px 4px; }
+.m-tile { border: 1px solid var(--rule); border-radius: 8px; padding: 8px 10px; background: var(--panel-2); }
+.m-tile .n { display: block; font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.m-tile .k { display: block; font-size: 11px; color: var(--muted); }
+.m-tile.good .n { color: var(--ok); }
+.m-tbl { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 0; }
+.m-tbl th { font-size: 10px; padding: 6px 16px; }
+.m-tbl td { padding: 6px 16px; border-bottom: 1px solid var(--rule); color: var(--ink-soft); }
+.m-tbl td:first-child { font-family: var(--mono); color: var(--ink); font-weight: 400; }
+
+@media (max-width: 900px) {
+  .split, .split.wide-left { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="progress" id="prog"></div>
+
+<main id="deck" tabindex="0" aria-label="Slides">
+
+  <section class="slide" data-t="Threaded">
+    <div class="inner">
+      <p class="eyebrow">Design &middot; threaded.at</p>
+      <h1>Threaded</h1>
+      <p class="lede">A link aggregator for links, text posts, and threaded discussion. Sign in with any atproto account. Submissions and comments live in your own repo, in records any aggregator can read.</p>
+      <div class="grid g3">
+        <div class="card stat"><span class="n">0</span><span class="k">passwords stored</span></div>
+        <div class="card stat"><span class="n">5</span><span class="k">user levels</span></div>
+        <div class="card stat"><span class="n">7</span><span class="k">listings and sorts</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Overview">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Overview</p>
+        <h2>What Threaded is</h2>
+      </div>
+      <div class="grid g3">
+        <div class="card">
+          <span class="tag neu">Structure</span>
+          <h3>Curated by its members</h3>
+          <ul class="plain">
+            <li>Required tags with rules</li>
+            <li>Flags with reasons</li>
+            <li>Public moderation log</li>
+            <li>Role badges, tenure-based trust</li>
+            <li>Ranking that decays with age</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="tag neu">Openness</span>
+          <h3>Open to anyone</h3>
+          <ul class="plain">
+            <li>Anyone can sign in</li>
+            <li>Show and Ask posts</li>
+            <li>Plain, fast front page</li>
+            <li>Top by day, week, year</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="tag ok">atproto</span>
+          <h3>Identity and ownership</h3>
+          <ul class="plain">
+            <li>OAuth sign-in, no passwords</li>
+            <li>Site-neutral records in your repo</li>
+            <li>Handle changes follow you</li>
+            <li>Opt-in Bluesky cross-post</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Front page">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Mockup</p>
+        <h2>The front page</h2>
+      </div>
+      <div class="frame">
+        <div class="frame-bar"><span class="fd"></span><span class="fd"></span><span class="fd"></span><span class="url">threaded.at</span></div>
+        <div class="frame-body">
+          <div class="m-top">
+            <span class="m-brand">Threaded</span>
+            <span class="m-nav"><span class="on">front</span><span>newest</span><span>active</span><span>top</span><span>tags</span><span>search</span></span>
+            <span class="m-user">alice.bsky.social (3)</span>
+          </div>
+          <ol class="m-list">
+            <li class="m-story"><span class="m-score up">48</span><div><span class="m-title">Writing a B-tree from scratch</span><span class="m-tag">databases</span><span class="m-tag">rust</span><span class="m-dom">example.com</span><div class="m-meta">by <b>mira.dev</b> 2 hours ago | 23 comments, <span class="m-ribbon">4 new</span></div></div></li>
+            <li class="m-story"><span class="m-score">31</span><div><span class="m-title">How the firehose sequences events</span><span class="m-tag">networking</span><span class="m-dom">example.org</span><div class="m-meta">by <b>tomas.example</b> 3 hours ago | 11 comments</div></div></li>
+            <li class="m-story"><span class="m-score">19</span><div><span class="m-title">Ask: what do you use for full-text search?</span><span class="m-tag">ask</span><span class="m-tag">databases</span><div class="m-meta">by <b>jun.example</b> <span class="m-new">new user</span> 4 hours ago | 37 comments</div></div></li>
+            <li class="m-story"><span class="m-score">15</span><div><span class="m-title">Show: a terminal RSS reader</span><span class="m-tag">show</span><span class="m-tag">rust</span><span class="m-dom">example.net</span><div class="m-meta">by <b>sam.example</b> 8 hours ago | 9 comments</div></div></li>
+            <li class="m-story"><span class="m-score">12</span><div><span class="m-title">Layout engines, a talk</span><span class="m-tag">web</span><span class="m-tag media">video</span><span class="m-dom">video.example</span><div class="m-meta">by <b>ana.example</b> 10 hours ago | no comments</div></div></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Thread">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Mockup</p>
+        <h2>A story and its thread</h2>
+        <p class="sub">Role badges mark verified roles. A flag is a downvote that must carry a reason.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar"><span class="fd"></span><span class="fd"></span><span class="fd"></span><span class="url">threaded.at/s/k3x9qa</span></div>
+        <div class="frame-body">
+          <ol class="m-list">
+            <li class="m-story"><span class="m-score up">48</span><div><span class="m-title">Writing a B-tree from scratch</span><span class="m-tag">databases</span><span class="m-tag">rust</span><span class="m-dom">example.com</span><div class="m-meta">by <b>mira.dev</b> (author) 2 hours ago | archive | save | hide</div></div></li>
+          </ol>
+          <div class="m-comment">
+            <div class="m-meta"><b>tomas.example</b> <span class="m-badge">maintainer of quilldb</span> 1 hour ago</div>
+            <p>The split policy section matches what we shipped. Bulk loading deserves its own post.</p>
+            <div class="m-actions">reply | link | flag</div>
+          </div>
+          <div class="m-comment d2">
+            <div class="m-meta"><b>mira.dev</b> 50 minutes ago</div>
+            <p>Writing it now.</p>
+            <div class="m-actions">reply | link | flag <span class="m-flagmenu">off-topic &middot; me-too &middot; troll &middot; unkind &middot; spam</span></div>
+          </div>
+          <div class="m-comment">
+            <div class="m-meta"><b>jun.example</b> 30 minutes ago</div>
+            <p>How does this compare to an LSM for write-heavy loads?</p>
+            <div class="m-actions">reply | link | flag</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Sign-in">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">atproto OAuth</p>
+        <h2>Sign in with your handle</h2>
+        <p class="sub">Threaded is a confidential client: PAR, PKCE, DPoP, and an ES256 client assertion.</p>
+      </div>
+      <div class="split wide-left">
+        <div class="steps">
+          <div class="step"><span class="idx">1</span><div><h3>Enter a handle</h3><p>Suggestions appear as you type. Resolve handle to DID, DID to PDS, PDS to its authorization server.</p></div></div>
+          <div class="step"><span class="idx">2</span><div><h3>Pushed request</h3><p>PAR with PKCE challenge, DPoP proof, and signed client assertion.</p></div></div>
+          <div class="step"><span class="idx">3</span><div><h3>Consent at the PDS</h3><p>The user approves the scopes on their own server.</p></div></div>
+          <div class="step"><span class="idx">4</span><div><h3>Callback</h3><p>Exchange the code. Reject unless <code>sub</code> equals the resolved DID and scope includes <code>atproto</code>.</p></div></div>
+          <div class="step"><span class="idx">5</span><div><h3>Session</h3><p>Tokens and DPoP key stay server-side. The cookie holds a session key only.</p></div></div>
+        </div>
+        <div class="frame">
+          <div class="frame-bar"><span class="fd"></span><span class="fd"></span><span class="fd"></span><span class="url">threaded.at/login</span></div>
+          <div class="frame-body m-login">
+            <h3>Sign in</h3>
+            <p class="m-small">Use any atproto account: Bluesky or your own PDS.</p>
+            <span class="m-label">Handle or server</span>
+            <span class="m-input">ali</span>
+            <ul class="m-suggest">
+              <li class="on"><span class="m-av"></span><b>Alice Ng</b> @alice.bsky.social</li>
+              <li><span class="m-av"></span><b>Alina Ross</b> @alina.example</li>
+              <li><span class="m-av"></span><b>Ali K</b> @alik.dev</li>
+            </ul>
+            <p class="m-small">3 accounts found. You sign in on the server that hosts your account, not on Threaded.</p>
+            <span class="m-btn">Continue</span>
+            <p class="m-small">Threaded asks to write <code>at.threaded.submission</code> and <code>at.threaded.comment</code> records to your repo.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Where you sign in">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Sign-in, step 2</p>
+        <h2>Always say where the password goes</h2>
+        <p class="sub">Before leaving threaded.at, the page names the server the user will sign in at. They press the button themselves; nothing redirects on its own.</p>
+      </div>
+      <div class="split wide-left">
+        <div class="frame">
+          <div class="frame-bar"><span class="fd"></span><span class="fd"></span><span class="fd"></span><span class="url">threaded.at/login/confirm</span></div>
+          <div class="frame-body m-login">
+            <h3>Sign in at bsky.social</h3>
+            <p class="m-text-block">Your account <b>@alice.example.com</b> is hosted at <b>bsky.social</b>. You will sign in there, and it will ask whether Threaded may post to your account. Threaded never sees your password. When you finish, you come back to threaded.at.</p>
+            <p class="m-small">Account data stored at morel.us-east.host.bsky.network</p>
+            <p class="m-check">Before you type your password, check that your browser's address bar shows <b>bsky.social</b>.</p>
+            <span class="m-btn">Continue to bsky.social</span> <span class="m-link">Use a different account</span>
+          </div>
+        </div>
+        <div class="steps">
+          <div class="step"><span class="idx">Host</span><div><h3>The Authorization Server's</h3><p>The host of its <code>authorization_endpoint</code>, which the address bar will show. For Bluesky-hosted accounts that is bsky.social, not the PDS host.</p></div></div>
+          <div class="step"><span class="idx">Tab</span><div><h3>Same tab, no pop-up</h3><p>The real domain is in the address bar, where the page tells the user to look.</p></div></div>
+          <div class="step"><span class="idx">IDN</span><div><h3>Look-alike domains shown</h3><p>Non-ASCII hosts also show their <code>xn--</code> form.</p></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Ownership">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Where content lives</p>
+        <h2>Public in your repo, private here</h2>
+      </div>
+      <div class="split">
+        <div class="tw">
+          <table>
+            <thead><tr><th>Data</th><th>Lives in</th><th>Visibility</th></tr></thead>
+            <tbody>
+              <tr class="yes"><td>Stories</td><td>Author's PDS</td><td><span class="pill y">Public</span></td></tr>
+              <tr class="yes"><td>Comments</td><td>Author's PDS</td><td><span class="pill y">Public</span></td></tr>
+              <tr class="yes"><td>Mod log</td><td>Threaded</td><td><span class="pill y">Public</span></td></tr>
+              <tr><td>Upvotes</td><td>Threaded; your repo as <code>at.threaded.vote</code> if you opt in</td><td><span class="pill m">Your choice</span></td></tr>
+              <tr class="no"><td>Flags</td><td>Threaded</td><td><span class="pill n">Private</span></td></tr>
+              <tr class="no"><td>Saved, hidden, filters</td><td>Threaded</td><td><span class="pill n">Private</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+<pre class="code"><span class="c">// at://did:plc:abc/at.threaded.submission/3m...</span>
+{
+  <span class="k">"$type"</span>: "at.threaded.submission",
+  <span class="k">"title"</span>: "Writing a B-tree from scratch",
+  <span class="k">"url"</span>: "https://example.com/btree",
+  <span class="k">"tags"</span>: ["databases", "rust"],
+  <span class="k">"authored"</span>: false,
+  <span class="k">"createdAt"</span>: "2026-10-25T18:00:00Z"
+}</pre>
+      </div>
+      <div class="note">Threaded writes the record, then indexes it. hydrant carries edits, deletes, and records made by other apps, and backfills accounts it has not seen. Every record passes the same checks as the web form, triage included.</div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Ranking">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Sorting</p>
+        <h2>Rank that decays with age</h2>
+        <p class="sub">Ten times the score holds a story level with one 22 hours newer. Stored on the row, so every listing is an index scan.</p>
+      </div>
+      <div class="split">
+<pre class="code"><span class="k">base</span>    = sum(tag.rank_boost) + (authored link ? 0.25 : 0)
+<span class="k">cpoints</span> = base &lt; 0 ? 0
+        : min(0.5 * sum(comment.score + 1), max(score, 0))
+<span class="k">order</span>   = log10(max(|score + 1| + cpoints, 1))
+<span class="k">rank</span>    = order * sign(score) + base + created_at / 79200
+
+<span class="c">Capping cpoints at max(score, 0) keeps a negative</span>
+<span class="c">score's full weight, so flagged stories sink.</span></pre>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Listing</th><th>Order</th></tr></thead>
+            <tbody>
+              <tr><td>front page</td><td>rank</td></tr>
+              <tr><td>newest</td><td>submitted</td></tr>
+              <tr><td>active</td><td>last comment</td></tr>
+              <tr><td>top</td><td>score in day, week, month, year, all</td></tr>
+              <tr><td>/t/tag</td><td>rank, one tag</td></tr>
+              <tr><td>/domain/host</td><td>newest, host and subdomains</td></tr>
+              <tr><td>/u/handle</td><td>a user's posts, newest</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Search">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Mockup</p>
+        <h2>Search with operators</h2>
+        <p class="sub">SQLite FTS5 with BM25. Every term reaches FTS5 quoted, so input never becomes query syntax.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar"><span class="fd"></span><span class="fd"></span><span class="fd"></span><span class="url">threaded.at/search</span></div>
+        <div class="frame-body">
+          <div class="m-search"><span class="m-input">"error handling" tag:rust -tag:job domain:example.com sort:new</span><span class="m-btn">Search</span></div>
+          <div class="m-hint">"phrase" -word title: tag: -tag: domain: submitter: commenter: sort:new sort:score</div>
+          <ol class="m-list">
+            <li class="m-story"><span class="m-score">22</span><div><span class="m-title">Async <span class="m-hl">error handling</span> in Rust</span><span class="m-tag">rust</span><span class="m-dom">example.com</span><div class="m-meta">by <b>mira.dev</b> 3 days ago | 14 comments</div></div></li>
+            <li class="m-story"><span class="m-score">9</span><div><span class="m-title">Typed <span class="m-hl">error handling</span> without macros</span><span class="m-tag">rust</span><span class="m-dom">blog.example.com</span><div class="m-meta">by <b>sam.example</b> 2 weeks ago | 6 comments</div></div></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Levels">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Trust</p>
+        <h2>User levels</h2>
+        <p class="sub">New, Member, and Trusted come from tenure here and karma. Moderator and Admin are granted. Every threshold is a setting.</p>
+      </div>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Capability</th><th>New</th><th>Member</th><th>Trusted</th><th>Mod</th><th>Admin</th></tr></thead>
+          <tbody>
+            <tr><td>Criteria</td><td>under 70 days</td><td>past probation</td><td>karma 50+</td><td>granted</td><td>granted</td></tr>
+            <tr><td>Read, upvote, comment</td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td></tr>
+            <tr><td>Submit (karma -4+)</td><td><span class="pill m">limited</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td></tr>
+            <tr><td>Restricted tags</td><td><span class="pill n">no</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td></tr>
+            <tr><td>Flag stories</td><td><span class="pill n">no</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td></tr>
+            <tr><td>Flag comments (karma 50+)</td><td><span class="pill n">no</span></td><td><span class="pill n">no</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td></tr>
+            <tr><td>Vouch for a new user</td><td><span class="pill n">no</span></td><td><span class="pill n">no</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td></tr>
+            <tr><td>Moderate</td><td><span class="pill n">no</span></td><td><span class="pill n">no</span></td><td><span class="pill n">no</span></td><td><span class="pill y">yes</span></td><td><span class="pill y">yes</span></td></tr>
+            <tr><td>Tags and roles</td><td><span class="pill n">no</span></td><td><span class="pill n">no</span></td><td><span class="pill n">no</span></td><td><span class="pill n">no</span></td><td><span class="pill y">yes</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note">Sign-in is open to any DID. A Trusted user's vouch ends probation early, and the vouch shows on the profile.</div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Moderation">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Moderation</p>
+        <h2>Flags in, public log out</h2>
+      </div>
+      <div class="split">
+        <div class="grid">
+          <div class="card striped med">
+            <span class="tag med">Flags</span>
+            <h3>A downvote with a reason</h3>
+            <p>Stories: off-topic, already posted, broken link, spam. Comments: off-topic, me-too, troll, unkind, spam. Three flags send an item to the queue. Flags stay private.</p>
+          </div>
+          <div class="card striped hard">
+            <span class="tag hard">Actions</span>
+            <h3>Every action is logged</h3>
+            <p>Remove, restore, edit, merge, lock, ban by DID, grant role badges and roles. Notes on users stay private to moderators.</p>
+          </div>
+          <div class="card striped ok">
+            <span class="tag ok">Labels</span>
+            <h3>atproto labelers</h3>
+            <p>Account labels <code>!takedown</code> and <code>!hide</code> from configured labelers hide content.</p>
+          </div>
+        </div>
+        <div class="frame">
+          <div class="frame-bar"><span class="fd"></span><span class="fd"></span><span class="fd"></span><span class="url">threaded.at/moderations</span></div>
+          <div class="frame-body">
+            <table class="m-log">
+              <tr><td>18:42</td><td>Merged "B-tree internals" into "Writing a B-tree from scratch": already posted</td></tr>
+              <tr><td>17:31</td><td>triage held a story by spam.example: spam (no promotional links without discussion)</td></tr>
+              <tr><td>17:10</td><td>Confirmed hold on a story by spam.example</td></tr>
+              <tr><td>16:55</td><td>Banned spam.example: link farm</td></tr>
+              <tr><td>15:03</td><td>Retagged "Layout engines" +video: community edit</td></tr>
+              <tr><td>12:20</td><td>Granted role badge "maintainer of quilldb" to tomas.example</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="AI triage">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Moderation</p>
+        <h2>Machines triage, people decide</h2>
+        <p class="sub">Every new item gets a verdict against the written rules. Only clear spam is acted on alone, and a moderator reviews every hold.</p>
+      </div>
+      <div class="split wide-left">
+        <div class="frame">
+          <div class="frame-bar"><span class="fd"></span><span class="fd"></span><span class="fd"></span><span class="url">threaded.at/mod/queue</span></div>
+          <div class="frame-body">
+            <ol class="m-list">
+              <li class="m-story"><span class="m-score">0</span><div><span class="m-title">Best VPN deals this week</span><span class="m-tag">web</span><span class="m-dom">deals.example</span><div class="m-meta">by <b>spam.example</b> <span class="m-new">new user</span> 4 minutes ago</div><div class="m-verdict hold"><span class="m-badge">triage</span> held: spam, high. Fourth link to the same storefront today; no text.</div><div class="m-actions">confirm | release | ban</div></div></li>
+              <li class="m-story"><span class="m-score">-2</span><div><span class="m-title">Re: borrow checker rant</span><div class="m-meta">comment by <b>kit.example</b> 20 minutes ago | 2 flags: unkind</div><div class="m-verdict"><span class="m-badge">triage</span> suggests: unkind, medium. Personal attack in the second paragraph.</div><div class="m-actions">remove | dismiss</div></div></li>
+              <li class="m-story"><span class="m-score">3</span><div><span class="m-title">Why I left the industry</span><span class="m-tag">meta</span><div class="m-meta">by <b>rae.example</b> 1 hour ago | 3 flags: off-topic</div><div class="m-verdict"><span class="m-badge">triage</span> needs a human. Author opted out of AI triage.</div><div class="m-actions">remove | dismiss</div></div></li>
+            </ol>
+          </div>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Verdict</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr class="no"><td>spam, high</td><td>Hold, log, top of queue</td></tr>
+              <tr><td>other rule</td><td>Suggestion only</td></tr>
+              <tr><td>needs_human</td><td>Queue</td></tr>
+              <tr class="yes"><td>ok</td><td>Nothing</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="note">Users can keep their posts out of AI triage; those go straight to a human. Hold precision is public; under 95% over the last 100, automatic holds switch off.</div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Mod queue">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Moderator view</p>
+        <h2>One queue, one tab per kind of work</h2>
+        <p class="sub">Every action needs a reason, and the reason goes to the public mod log.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar"><span class="fd"></span><span class="fd"></span><span class="fd"></span><span class="url">threaded.at/mod</span></div>
+        <div class="frame-body">
+          <div class="m-tabs"><span class="m-tab">Holds<span class="m-count">2</span></span><span class="m-tab on">Flagged<span class="m-count">5</span></span><span class="m-tab">Suggestions<span class="m-count">9</span></span><span class="m-tab">Detached<span class="m-count">0</span></span><span class="m-tab">Mod mail<span class="m-count">1</span></span></div>
+          <ol class="m-list">
+            <li class="m-story"><span class="m-score">-4</span><div><span class="m-title">Comment on "Writing a B-tree from scratch"</span><div class="m-meta">by <b>kit.example</b> (member, 210 days) 25 minutes ago | 6 flags: unkind 4, troll 2</div><div class="m-verdict"><span class="m-badge">triage</span> suggests: unkind, high. Insults the parent's author by name.</div><div class="m-actions">remove | dismiss | review | user</div></div></li>
+            <li class="m-story"><span class="m-score">1</span><div><span class="m-title">Our new SaaS launches today</span><span class="m-tag">show</span><span class="m-dom">saas.example</span><div class="m-meta">by <b>growth.example</b> <span class="m-new">new user</span> 2 hours ago | 4 flags: spam 3, off-topic 1</div><div class="m-verdict"><span class="m-badge">triage</span> suggests: spam, medium. Third submission from this domain this week.</div><div class="m-actions">remove | dismiss | review | user</div></div></li>
+            <li class="m-story"><span class="m-score">7</span><div><span class="m-title">Why I left the industry</span><span class="m-tag">meta</span><div class="m-meta">by <b>rae.example</b> (trusted, 2 years) 1 hour ago | 3 flags: off-topic 3</div><div class="m-verdict"><span class="m-badge">triage</span> needs a human. Author opted out of AI triage.</div><div class="m-actions">remove | dismiss | review | user</div></div></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Mod review">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Moderator view</p>
+        <h2>Item review and user review</h2>
+        <p class="sub">Moderators see who flagged, every version, and the triage reasoning. Notes on users stay private.</p>
+      </div>
+      <div class="split">
+        <div class="frame">
+          <div class="frame-bar"><span class="fd"></span><span class="fd"></span><span class="fd"></span><span class="url">threaded.at/mod/c/q8f2ma</span></div>
+          <div class="frame-body m-pane">
+            <h3>Comment</h3>
+            <p>"You are all wrong about ORMs, and anyone who disagrees is an idiot."</p>
+            <h3>Flags</h3>
+            <p><b>unkind</b> by mira.dev, jun.example, ana.example, sam.example</p>
+            <p><b>troll</b> by tomas.example, rae.example</p>
+            <h3>Triage</h3>
+            <p>unkind, high: insults the parent's author by name. claude-opus-5-5, rules v7.</p>
+            <h3>Versions</h3>
+            <p>Edited 4 minutes after posting: added the last clause.</p>
+            <h3>Act</h3>
+            <span class="m-field">Reason (public): Personal attack</span>
+            <span class="m-btn">Remove</span> <span class="m-btn quiet">Dismiss flags</span>
+          </div>
+        </div>
+        <div class="frame">
+          <div class="frame-bar"><span class="fd"></span><span class="fd"></span><span class="fd"></span><span class="url">threaded.at/mod/u/kit.example</span></div>
+          <div class="frame-body m-pane">
+            <h3>Identity</h3>
+            <p><b>kit.example</b> did:plc:k7x2... on morel.us-east.host.bsky.network. Account 3 years old; was kit.bsky.social until March.</p>
+            <h3>Standing</h3>
+            <p>Member, 210 days, karma 34. Vouched by tomas.example.</p>
+            <h3>Activity</h3>
+            <p>41 comments, 2 removed. Flags received: unkind 9, troll 2. Flags given: 6, moderators agreed with 5.</p>
+            <h3>Notes</h3>
+            <p>2026-09-14 ana: warned by mod mail about tone in the editor thread.</p>
+            <span class="m-field">Add a private note</span>
+            <span class="m-btn quiet">Add note</span> <span class="m-btn">Ban</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Admin">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Admin view</p>
+        <h2>Health, tags, people, settings, rules</h2>
+        <p class="sub">Every change is logged with the old and new value. A rules change must pass an eval run against past moderator decisions.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar"><span class="fd"></span><span class="fd"></span><span class="fd"></span><span class="url">threaded.at/admin</span></div>
+        <div class="frame-body">
+          <div class="m-tabs"><span class="m-tab on">Health</span><span class="m-tab">Tags</span><span class="m-tab">People</span><span class="m-tab">Settings</span><span class="m-tab">Rules</span></div>
+          <div class="m-tiles">
+            <div class="m-tile good"><span class="n">0.4 s</span><span class="k">hydrant stream lag</span></div>
+            <div class="m-tile"><span class="n">3</span><span class="k">triage queue depth</span></div>
+            <div class="m-tile good"><span class="n">97%</span><span class="k">hold precision, last 100</span></div>
+            <div class="m-tile good"><span class="n">closed</span><span class="k">circuit breaker</span></div>
+          </div>
+          <table class="m-tbl">
+            <thead><tr><th>Tag</th><th>Category</th><th>Rank boost</th><th>Rules</th></tr></thead>
+            <tbody>
+              <tr><td>announce</td><td>meta</td><td>0</td><td>privileged</td></tr>
+              <tr><td>meta</td><td>meta</td><td>-0.5</td><td>new users ok</td></tr>
+              <tr><td>rust</td><td>languages</td><td>0</td><td>new users ok</td></tr>
+              <tr><td>video</td><td>format</td><td>-0.25</td><td>media</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Atmosphere">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">For atproto builders</p>
+        <h2>Show off your atproto project</h2>
+      </div>
+      <div class="grid g2">
+        <div class="card"><span class="tag ok">show + atproto</span><h3>Project submissions</h3><p>A tangled.org repo URL renders a repo card. An <code>at://</code> URI renders the record.</p></div>
+        <div class="card"><span class="tag ok">/lexicons</span><h3>Lexicon search</h3><p>Resolve an NSID through its <code>_lexicon</code> DNS record, show the schema and the stories that mention it.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Blog">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Site updates</p>
+        <h2>A blog from a folder of Markdown</h2>
+        <p class="sub">Add, edit, or delete a file in <code>./blog</code> and the site follows within a second. No restart.</p>
+      </div>
+      <div class="split">
+<pre class="code"><span class="c">blog/sign-in-is-live.md</span>
+---
+<span class="k">title</span>: Sign-in is live
+<span class="k">date</span>: 2026-11-02
+<span class="k">summary</span>: Any atproto account can now sign in.
+---
+Body in CommonMark, with tables,
+strikethrough, and task lists.</pre>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Route</th><th>Page</th></tr></thead>
+            <tbody>
+              <tr><td>/blog</td><td>Newest first, 10 per page</td></tr>
+              <tr><td>/blog/{slug}</td><td>One post</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="note">A file that fails to parse is skipped and logged with the reason; the rest keeps serving. <code>draft: true</code> keeps a post off the site.</div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Accessibility">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">WCAG 2.2 AA</p>
+        <h2>Accessible from the first commit</h2>
+        <p class="sub">Every M0 page passes axe-core in light and dark. CI fails on a regression.</p>
+      </div>
+      <div class="split">
+        <div class="tw">
+          <table>
+            <thead><tr><th>Area</th><th>Rule</th></tr></thead>
+            <tbody>
+              <tr><td>Structure</td><td>One h1, distinct titles, landmarks, skip link</td></tr>
+              <tr><td>Contrast</td><td>Text 4.5:1, borders and focus 3:1, both schemes</td></tr>
+              <tr><td>Targets</td><td>24 by 24 CSS px minimum</td></tr>
+              <tr><td>Votes, flags</td><td>Real buttons and radio groups; no hover menus</td></tr>
+              <tr><td>Shortcuts</td><td>Off in text fields; can be turned off</td></tr>
+              <tr><td>State</td><td>Words, not color alone</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="grid">
+          <div class="card striped ok">
+            <span class="tag ok">Lookahead</span>
+            <h3>A real combobox</h3>
+            <p>The WAI-ARIA combobox pattern in the light DOM: <code>aria-activedescendant</code> on the input, a listbox of options, and a status line that announces the count.</p>
+          </div>
+          <div class="card striped med">
+            <span class="tag med">Prior art</span>
+            <h3>Why not actor-typeahead</h3>
+            <p>Its list sits in a closed shadow root. ARIA ID references cannot cross that boundary, so screen readers hear no suggestions.</p>
+          </div>
+          <div class="card">
+            <span class="tag neu">Testing</span>
+            <h3>Automated and by hand</h3>
+            <p><code>make a11y</code> in CI. Before each milestone ships: VoiceOver, NVDA, keyboard only, 200% and 400% zoom.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Architecture">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Build</p>
+        <h2>Two processes, three places on disk</h2>
+      </div>
+      <div class="grid g3" style="margin-bottom:14px">
+        <div class="card"><span class="tag neu">process</span><h3>threaded</h3><p>Web server, stream consumer, triage worker. Reads and writes the SQLite file; reads the blog folder.</p></div>
+        <div class="card"><span class="tag neu">process</span><h3>hydrant</h3><p>Indexes and backfills <code>at.threaded.*</code> records into its own database. Talks to threaded over a Unix socket.</p></div>
+        <div class="card"><span class="tag neu">files</span><h3>Blog folder</h3><p>Markdown posts with YAML front matter. Picked up within a second of any change.</p></div>
+      </div>
+      <div class="grid g4">
+        <div class="card"><span class="tag neu">threaded</span><h3>Binary</h3><p>serve and seed. One executable, run by systemd behind nginx.</p></div>
+        <div class="card"><span class="tag neu">core</span><h3>Logic</h3><p>Ranking, levels, search grammar, link canonicalization, tag rules.</p></div>
+        <div class="card"><span class="tag neu">store</span><h3>SQLite</h3><p>sqlx, WAL, FTS5 indexes kept by triggers, forward-only migrations.</p></div>
+        <div class="card"><span class="tag neu">web</span><h3>axum</h3><p>askama templates, server-rendered, works without JavaScript. Blog loader.</p></div>
+      </div>
+      <div class="tw" style="margin-top:14px">
+        <table>
+          <thead><tr><th>Concern</th><th>Choice</th></tr></thead>
+          <tbody>
+            <tr><td>OAuth</td><td>jacquard-oauth and jacquard-axum 0.12.2</td></tr>
+            <tr><td>Markdown</td><td>pulldown-cmark, sanitized by ammonia</td></tr>
+            <tr><td>Ingest</td><td>hydrant in filter mode on <code>at.threaded.*</code>: backfill plus an ordered stream, cursor stored</td></tr>
+            <tr><td>Triage</td><td><code>claude-opus-5-5</code> at low effort, structured output, cached rules prompt</td></tr>
+            <tr><td>Lexicons</td><td><code>lexicons/at/threaded/</code>, linted with <code>goat lex lint</code></td></tr>
+            <tr><td>CSRF, XSS</td><td>SameSite cookies plus form token; auto-escaping; strict CSP</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-t="Milestones">
+    <div class="inner">
+      <div class="sec-head">
+        <p class="eyebrow">Plan</p>
+        <h2>Milestones</h2>
+      </div>
+      <div class="steps">
+        <div class="step"><span class="idx">M0</span><div><h3>Scaffold</h3><p>Schema, ranking, levels, search, link canonicalization, read-only listings, blog, lexicon drafts, accessibility audit.</p></div><span class="effort">Built</span></div>
+        <div class="step now"><span class="idx">M1</span><div><h3>Sign-in</h3><p>Confidential OAuth client, metadata and JWKS, SQLite auth store, sessions, sign-in form with handle lookahead, localhost dev flow.</p></div><span class="effort">Next</span></div>
+        <div class="step"><span class="idx">M2</span><div><h3>Writing</h3><p>Submit, comment, upvote, flag. Records to the PDS. Markdown. Rate limits.</p></div></div>
+        <div class="step"><span class="idx">M3</span><div><h3>Moderation</h3><p>Moderator queue and reviews, admin pages, actions, log, notes, bans, merges, role badges, suggestions, AI triage.</p></div></div>
+        <div class="step"><span class="idx">M4</span><div><h3>Indexer</h3><p>hydrant beside Threaded: backfill, ordered stream, edits, deletes, account events, records from other apps.</p></div></div>
+        <div class="step"><span class="idx">M5</span><div><h3>Reader features</h3><p>Inbox, read ribbons, saved, filters, feeds, cross-post, labelers.</p></div></div>
+        <div class="step"><span class="idx">M6</span><div><h3>Atmosphere</h3><p>Project submissions, lexicon search, network stats.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<nav class="bar">
+  <span class="bar-title">Threaded design <span id="crumb"></span></span>
+  <div class="dots" id="dots"></div>
+  <span class="count" id="count"></span>
+  <div class="arrows">
+    <button class="arrow" id="prev" type="button" aria-label="Previous slide">&#8592;</button>
+    <button class="arrow" id="next" type="button" aria-label="Next slide">&#8594;</button>
+  </div>
+</nav>
+
+<script>
+/* JS reports position and handles keys/clicks. It must NOT drive movement
+   by toggling classes, and must NOT listen for 'wheel'. Scroll-snap owns
+   the gesture; index() is derived from scroll position so the chrome stays
+   correct however the user navigated. */
+(function () {
+  var deck   = document.getElementById('deck');
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var dots   = document.getElementById('dots');
+  var count  = document.getElementById('count');
+  var crumb  = document.getElementById('crumb');
+  var prog   = document.getElementById('prog');
+  var prev   = document.getElementById('prev');
+  var next   = document.getElementById('next');
+  var buttons = [];
+
+  slides.forEach(function (s, n) {
+    var b = document.createElement('button');
+    b.className = 'dot';
+    b.type = 'button';
+    b.setAttribute('aria-label', s.dataset.t || ('Slide ' + (n + 1)));
+    b.addEventListener('click', function () { go(n); });
+    dots.appendChild(b);
+    buttons.push(b);
+  });
+
+  function index() {
+    var best = 0, bestD = Infinity;
+    for (var k = 0; k < slides.length; k++) {
+      var d = Math.abs(slides[k].getBoundingClientRect().top);
+      if (d < bestD) { bestD = d; best = k; }
+    }
+    return best;
+  }
+
+  function sync() {
+    var i = index();
+    buttons.forEach(function (b, k) { b.setAttribute('aria-current', k === i ? 'true' : 'false'); });
+    count.textContent = String(i + 1).padStart(2, '0') + ' / ' + String(slides.length).padStart(2, '0');
+    if (crumb) { crumb.textContent = '· ' + (slides[i].dataset.t || ''); }
+    prev.disabled = i === 0;
+    next.disabled = i === slides.length - 1;
+    var max = deck.scrollHeight - deck.clientHeight;
+    prog.style.width = (max > 0 ? (deck.scrollTop / max) * 100 : 0) + '%';
+  }
+
+  function go(n) {
+    var i = Math.max(0, Math.min(slides.length - 1, n));
+    slides[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  deck.addEventListener('scroll', sync, { passive: true });
+  prev.addEventListener('click', function () { go(index() - 1); });
+  next.addEventListener('click', function () { go(index() + 1); });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) { return; }
+    var k = e.key;
+    if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'PageDown' || k === ' ' || k === 'j') {
+      e.preventDefault(); go(index() + 1);
+    } else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp' || k === 'k') {
+      e.preventDefault(); go(index() - 1);
+    } else if (k === 'Home' || k === 'g') {
+      e.preventDefault(); go(0);
+    } else if (k === 'End' || k === 'G') {
+      e.preventDefault(); go(slides.length - 1);
+    }
+  });
+
+  sync();
+})();
+</script>
+</body>
+</html>

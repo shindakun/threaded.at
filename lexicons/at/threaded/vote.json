@@ -1,0 +1,26 @@
+{
+  "lexicon": 1,
+  "id": "at.threaded.vote",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A public upvote on a submission or comment.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["subject", "createdAt"],
+        "properties": {
+          "subject": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "The submission or comment upvoted."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

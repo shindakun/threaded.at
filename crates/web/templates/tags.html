@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Tags | {{ site }}{% endblock %}
+{% block main %}
+<h1>Tags</h1>
+<table class="tags">
+<thead><tr><th scope="col">Tag</th><th scope="col">Description</th></tr></thead>
+{% for (name, description) in tags %}
+<tr><td><a class="tag" href="/t/{{ name }}">{{ name }}</a></td><td>{{ description }}</td></tr>
+{% endfor %}
+</table>
+{% endblock %}

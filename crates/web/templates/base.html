@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ site }}{% endblock %}</title>
+<link rel="stylesheet" href="/static/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="brand" href="/">{{ site }}</a>
+  <nav aria-label="Primary">
+    <a href="/"{% if nav == "front" %} aria-current="page"{% endif %}>front</a>
+    <a href="/newest"{% if nav == "newest" %} aria-current="page"{% endif %}>newest</a>
+    <a href="/active"{% if nav == "active" %} aria-current="page"{% endif %}>active</a>
+    <a href="/top"{% if nav == "top" %} aria-current="page"{% endif %}>top</a>
+    <a href="/tags"{% if nav == "tags" %} aria-current="page"{% endif %}>tags</a>
+    <a href="/search"{% if nav == "search" %} aria-current="page"{% endif %}>search</a>
+    <a href="/blog"{% if nav == "blog" %} aria-current="page"{% endif %}>blog</a>
+  </nav>
+</header>
+<main id="main" tabindex="-1">
+{% block main %}{% endblock %}
+</main>
+</body>
+</html>

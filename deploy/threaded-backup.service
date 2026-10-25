@@ -1,0 +1,8 @@
+[Unit]
+Description=Back up the Threaded database
+
+[Service]
+Type=oneshot
+User=threaded
+Group=threaded
+ExecStart=/opt/threaded/bin/threaded-backup

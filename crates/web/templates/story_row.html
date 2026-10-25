@@ -1,0 +1,14 @@
+<li class="story">
+  <div class="score">{{ s.score }}<span class="vh"> points</span></div>
+  <div class="body">
+    <div class="line">
+      <a class="title" href="{{ s.href }}">{{ s.title }}</a>
+      {% for t in s.tags %}<a class="tag" href="/t/{{ t }}">{{ t }}</a>{% endfor %}
+      {% if !s.domain.is_empty() %}<a class="domain" href="/domain/{{ s.domain }}">{{ s.domain }}</a>{% endif %}
+    </div>
+    <div class="meta">
+      by <span class="handle">{{ s.handle }}</span> {{ s.age }} |
+      <a href="/s/{{ s.short_id }}">{% if s.comments == 0 %}no comments{% else if s.comments == 1 %}1 comment{% else %}{{ s.comments }} comments{% endif %}</a>
+    </div>
+  </div>
+</li>

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{{ post.title }} | {{ site }}{% endblock %}
+{% block main %}
+<article class="post">
+  <h1>{{ post.title }}</h1>
+  <p class="meta"><time datetime="{{ post.date }}">{{ post.display_date }}</time>{% if let Some(a) = post.author %}, {{ a }}{% endif %}</p>
+  <div class="prose">
+{{ post.html|safe }}
+  </div>
+</article>
+<p class="back"><a href="/blog">All posts</a></p>
+{% endblock %}

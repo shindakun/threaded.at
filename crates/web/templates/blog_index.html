@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Blog{% if page > 1 %}, page {{ page }}{% endif %} | {{ site }}{% endblock %}
+{% block main %}
+<h1>Blog</h1>
+{% if posts.is_empty() %}
+<p class="empty">No posts.</p>
+{% else %}
+<ol class="posts">
+{% for p in posts %}
+<li>
+  <article class="post-item">
+    <h2><a href="/blog/{{ p.slug }}">{{ p.title }}</a></h2>
+    <p class="meta"><time datetime="{{ p.date }}">{{ p.display_date }}</time>{% if let Some(a) = p.author %}, {{ a }}{% endif %}</p>
+    {% if let Some(s) = p.summary %}<p>{{ s }}</p>{% endif %}
+  </article>
+</li>
+{% endfor %}
+</ol>
+{% endif %}
+{% if prev.is_some() || next.is_some() %}
+<nav class="pager" aria-label="Pages">
+  {% if let Some(p) = prev %}<a href="{{ p }}" rel="prev">Newer posts: page {{ page - 1 }}</a>{% endif %}
+  {% if let Some(n) = next %}<a href="{{ n }}" rel="next">Older posts: page {{ page + 1 }}</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}
