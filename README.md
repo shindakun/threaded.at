@@ -19,10 +19,23 @@ records in the author's own repo.
 
 ## Status
 
-M0 is built: the schema, ranking, levels, search, link canonicalization,
-read-only listings, the blog, the lexicon drafts, and an accessibility audit
-that every page passes. M1, sign-in, M2, writing, and M3, moderation, are
-built. The indexer is M4. The milestone table is in the design doc, section 16.
+Working today:
+
+- **Sign-in** with any atproto account, through its own server (OAuth).
+- **Writing:** submit, comment, reply, upvote, flag, edit, and delete.
+  Submissions, comments, and public upvotes are records in the author's repo.
+- **Reading:** ranked, newest, active, and top listings; tags, domains,
+  search, profiles, and the blog.
+- **Moderation:** a queue, item and user review, removals, locks, edits,
+  merges, bans, role badges, notes, edit suggestions, a public moderation log,
+  and admin pages for tags, roles, settings, and the site rules.
+- **AI triage**, off unless an Anthropic API key is configured.
+
+In progress: **M4, the indexer**, which reads Threaded records from the whole
+network through [hydrant](https://tangled.org/did:plc:dfl62fgb7wtjj3fcbb72naae/hydrant),
+not only those written through threaded.at. Its plan is
+[docs/0006-m4.md](docs/0006-m4.md). The milestone table is in the design doc,
+section 16.
 
 ## Quick start
 
@@ -127,14 +140,14 @@ section 12. A file that fails to parse is skipped and the reason is logged.
 | `/c/{short_id}/reply`, `/c/{short_id}/edit`, `/c/{short_id}/delete` | Reply to a comment; edit or delete yours |
 | `/submit` | Submit a story |
 | `/comment`, `/vote`, `/flag` | Form targets for comments, upvotes, and flags |
-| `/u/{handle}` | A user's stories, comments, and public upvotes |
-| `/settings` | Public upvotes; keeping your posts out of AI triage |
+| `/u/{handle}` | A user's stories, comments, and public upvotes; a DID works too |
+| `/settings` | Public upvotes; keeping your posts out of AI triage (form target `/settings/triage`) |
 | `/s/{short_id}/suggest` | Suggest a story's title and tags |
-| `/mod` | Moderation queue: Holds, Flagged, Suggestions, Edits |
+| `/mod` | Moderation queue: Holds, Flagged, Suggestions, Edits; form targets `/mod/verdicts/{id}` and `/mod/suggestions/{id}` |
 | `/mod/s/{short_id}`, `/mod/c/{short_id}`, `/mod/u/{handle}` | Review a story, comment, or user, and act on it |
 | `/moderations` | The public moderation log |
 | `/moderations/stats` | How often moderators agreed with AI triage |
-| `/admin`, `/admin/rules`, `/admin/tags`, `/admin/people`, `/admin/settings` | Health, site rules, tags, roles, and settings |
+| `/admin`, `/admin/rules`, `/admin/tags`, `/admin/people`, `/admin/settings` | Health, site rules, tags, roles, and settings; form target `/admin/breaker` |
 | `/search?q=` | Search; syntax in the design doc, section 7 |
 | `/tags` | Tag list |
 | `/blog` | Blog index, newest first; `?page=2` and on |
@@ -147,17 +160,18 @@ section 12. A file that fails to parse is skipped and the reason is logged.
 
 ```text
 src/main.rs        CLI: serve, seed, keygen, tag, role, triage check
-crates/core/       ranking, levels, search parser, links, tags
+crates/core/       ranking, levels, policy and settings, search parser, links, tags
 crates/auth/       atproto OAuth: keys, SQLite session store, sign-in flow, record writes
 crates/store/      SQLite via sqlx; migrations/ at the repo root
 crates/triage/     AI triage: the model request, verdicts, the worker
+crates/indexer/    reading records from hydrant: the client for its socket API
 crates/web/        axum router, askama templates, CSS
 migrations/        forward-only SQL migrations
 lexicons/          at.threaded.* lexicon schemas
 scripts/a11y/      axe-core page audit
 blog/              blog posts, served from ./blog
 deploy/            systemd units, nginx config, backup and update scripts
-docs/              design doc, deploy doc, and deck
+docs/              design doc, deploy doc, milestone plans, and deck
 third_party/       jacquard crates patched onto fixed crypto; see its README
 ```
 
