@@ -6,7 +6,7 @@
   </div>
   <div class="body">
     <div class="line">
-      <a class="title" href="{{ s.href }}">{{ s.title }}</a>
+      {% if s.domain.is_empty() %}<a class="title" href="{{ s.href }}">{{ s.title }}</a>{% else %}<a class="title" href="{{ s.href }}" target="_blank" rel="noopener">{{ s.title }}<span class="vh"> (opens in a new tab)</span></a>{% endif %}
       {% for t in s.tags %}<a class="tag" href="/t/{{ t }}">{{ t }}</a>{% endfor %}
       {% if !s.domain.is_empty() %}<a class="domain" href="/domain/{{ s.domain }}">{{ s.domain }}</a>{% endif %}
     </div>

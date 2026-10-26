@@ -2,7 +2,8 @@ use pulldown_cmark::{html, CowStr, Event, Options, Parser, Tag, TagEnd};
 
 /// Markdown written by users: no images, no headings, no raw HTML.
 /// Headings become paragraphs, images become their alt text, and HTML shows as
-/// written. Links carry `rel="nofollow ugc noopener noreferrer"`.
+/// written. Links open in a new tab and carry
+/// `rel="nofollow ugc noopener noreferrer"`.
 pub fn user(md: &str) -> String {
     let opts = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
     let mut in_image = 0usize;
@@ -26,6 +27,7 @@ pub fn user(md: &str) -> String {
     ammonia::Builder::default()
         .rm_tags(&["img", "h1", "h2", "h3", "h4", "h5", "h6"])
         .link_rel(Some("nofollow ugc noopener noreferrer"))
+        .set_tag_attribute_value("a", "target", "_blank")
         .clean(&out)
         .to_string()
 }
@@ -44,6 +46,7 @@ mod tests {
         assert!(h.contains("<p>Big</p>"), "{h}");
         assert!(h.contains("alt text"), "{h}");
         assert!(h.contains("&lt;b&gt;bold&lt;/b&gt;"), "{h}");
+        assert!(h.contains(r#"target="_blank""#), "{h}");
         assert!(
             h.contains(r#"rel="nofollow ugc noopener noreferrer""#),
             "{h}"

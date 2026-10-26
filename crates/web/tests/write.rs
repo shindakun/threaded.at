@@ -214,6 +214,12 @@ async fn submitting_writes_the_record_then_indexes_it() {
     let page = w.get(&format!("/s/{id}"), &alice).await;
     assert!(page.body.contains("Writing a B-tree"));
     assert!(
+        page.body
+            .contains(r#"href="https://example.com/btree" target="_blank" rel="noopener""#),
+        "a story's link opens in a new tab"
+    );
+    assert!(page.body.contains("(opens in a new tab)"));
+    assert!(
         page.body.contains(&format!(r#"href="/s/{id}/edit""#)),
         "the author can edit"
     );
@@ -749,6 +755,20 @@ async fn profiles_list_a_users_posts() {
         &[("story", &id), ("text", "Note to self")],
     )
     .await;
+    let text = w
+        .post(
+            "/submit",
+            &alice,
+            &[("title", "Just text"), ("text", "Body."), ("tags", "rust")],
+        )
+        .await;
+    let text_id = text.location.unwrap().trim_start_matches("/s/").to_string();
+    let page = w.get(&format!("/s/{text_id}"), "").await;
+    assert!(
+        page.body
+            .contains(&format!(r#"<a class="title" href="/s/{text_id}">"#)),
+        "a text post's title stays in this tab"
+    );
     let p = w.get("/u/alice.example", "").await;
     assert_eq!(p.status, StatusCode::OK);
     assert!(p.body.contains("<h1>alice.example</h1>"));
