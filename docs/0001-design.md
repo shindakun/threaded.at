@@ -563,6 +563,12 @@ the actor and the rule cited.
 | Grant, revoke | Role badge, role |
 | Create, edit, deactivate | Tag |
 
+A moderator's edit is stored as an override that the author's later edits do
+not replace. A merge moves comments and votes to the target story and can be
+undone. A lock stops comments, votes, and flags. A role badge is a label with
+an optional link, shown after the handle; moderators grant badges, admins
+grant roles. The M3 plan, `0005-m3.md`, has the details.
+
 Moderators write private notes on users (`mod_notes`). §9.7 and §9.8 describe
 the pages where all of this happens.
 
