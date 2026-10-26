@@ -10,6 +10,7 @@ records in the author's own repo.
 - [docs/0002-deploy.md](docs/0002-deploy.md): deploying to the droplet.
 - [docs/0003-m1.md](docs/0003-m1.md): the M1 plan, sign-in.
 - [docs/0004-m2.md](docs/0004-m2.md): the M2 plan, writing.
+- [docs/0005-m3.md](docs/0005-m3.md): the M3 plan, moderation.
 - [lexicons/at/threaded/](lexicons/at/threaded/): the submission, comment, and
   public vote schemas.
 
