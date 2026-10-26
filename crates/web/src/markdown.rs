@@ -2,8 +2,8 @@ use pulldown_cmark::{html, CowStr, Event, Options, Parser, Tag, TagEnd};
 
 /// Markdown written by users: no images, no headings, no raw HTML.
 /// Headings become paragraphs, images become their alt text, and HTML shows as
-/// written. Links open in a new tab and carry
-/// `rel="nofollow ugc noopener noreferrer"`.
+/// written. Only `https` links keep their target, open in a new tab, and carry
+/// `rel="nofollow ugc noopener noreferrer"`; any other link is plain text.
 pub fn user(md: &str) -> String {
     let opts = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
     let mut in_image = 0usize;
@@ -28,6 +28,7 @@ pub fn user(md: &str) -> String {
         .rm_tags(&["img", "h1", "h2", "h3", "h4", "h5", "h6"])
         .link_rel(Some("nofollow ugc noopener noreferrer"))
         .set_tag_attribute_value("a", "target", "_blank")
+        .url_schemes(["https"].into_iter().collect())
         .clean(&out)
         .to_string()
 }
@@ -51,6 +52,14 @@ mod tests {
             h.contains(r#"rel="nofollow ugc noopener noreferrer""#),
             "{h}"
         );
+    }
+
+    #[test]
+    fn only_https_links_keep_their_target() {
+        let h = user("[safe](https://example.com) [plain](http://example.com)");
+        assert!(h.contains(r#"href="https://example.com""#), "{h}");
+        assert!(!h.contains("http://example.com"), "{h}");
+        assert!(h.contains("plain"), "the text stays: {h}");
     }
 
     #[test]

@@ -780,7 +780,7 @@ lexicons/             at.threaded.* schemas.
 |---|---|
 | CSRF | `SameSite=Lax` cookies plus a per-session token on every POST |
 | XSS | askama auto-escaping; sanitized Markdown; CSP without `unsafe-inline`, `connect-src 'self'`, `img-src 'self' https://cdn.bsky.app` |
-| Link schemes | Only `http` and `https` URLs are accepted |
+| Link schemes | Only `https` URLs are accepted, for stories, badges, and links in user text |
 | FTS injection | Every search term is quoted |
 | Prompt injection | Item text reaches the model as data inside the user turn; the verdict schema allows no free-form action; the worst outcome is a wrong hold, which a moderator reviews |
 | Abuse | Per-DID and per-IP rate limits; level-based limits in §8 |

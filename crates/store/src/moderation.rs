@@ -717,7 +717,7 @@ impl Store {
         if let Some(l) = link {
             if threaded_core::link::parse(l).is_err() {
                 return Ok(Err(ModError::Refused(
-                    "The badge link must be an http or https URL.",
+                    "The badge link must be an https URL.",
                 )));
             }
         }

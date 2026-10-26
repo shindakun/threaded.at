@@ -214,7 +214,7 @@ async fn refusals() {
         check(
             &alice,
             "Again",
-            "http://www.e.example/dup?utm_source=x",
+            "https://www.e.example/dup/?utm_source=x",
             &["rust"]
         )
         .await,

@@ -14,7 +14,7 @@ pub struct Link {
 pub enum LinkError {
     #[error("not a valid URL")]
     Invalid,
-    #[error("only http and https links are allowed")]
+    #[error("links must use https")]
     Scheme,
     #[error("the URL has no host")]
     NoHost,
@@ -24,7 +24,7 @@ const TRACKING_PARAMS: &[&str] = &["fbclid", "gclid", "mc_cid", "mc_eid", "ref",
 
 pub fn parse(input: &str) -> Result<Link, LinkError> {
     let url = Url::parse(input.trim()).map_err(|_| LinkError::Invalid)?;
-    if !matches!(url.scheme(), "http" | "https") {
+    if url.scheme() != "https" {
         return Err(LinkError::Scheme);
     }
     let host = url
@@ -62,7 +62,7 @@ mod tests {
     #[test]
     fn variants_share_a_canonical_form() {
         let a = parse("https://www.Example.com/post/?utm_source=x&b=2&a=1#frag").unwrap();
-        let b = parse("http://example.com/post?a=1&b=2&fbclid=zz").unwrap();
+        let b = parse("https://example.com/post?a=1&b=2&fbclid=zz").unwrap();
         assert_eq!(a.canonical, "example.com/post?a=1&b=2");
         assert_eq!(a.canonical, b.canonical);
         assert_eq!(a.domain, "example.com");
@@ -78,6 +78,7 @@ mod tests {
     fn rejects_other_schemes() {
         assert_eq!(parse("javascript:alert(1)"), Err(LinkError::Scheme));
         assert_eq!(parse("ftp://example.com/"), Err(LinkError::Scheme));
+        assert_eq!(parse("http://example.com/"), Err(LinkError::Scheme));
         assert_eq!(parse("not a url"), Err(LinkError::Invalid));
     }
 }

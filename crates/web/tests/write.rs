@@ -131,7 +131,7 @@ async fn duplicates_rate_limits_and_permissions() {
             &newbie,
             &[
                 ("title", "Again"),
-                ("url", "http://www.e.example/one/?utm_source=x"),
+                ("url", "https://www.e.example/one/?utm_source=x"),
                 ("tags", "rust"),
             ],
         )

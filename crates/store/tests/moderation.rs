@@ -411,9 +411,7 @@ async fn locks_bans_badges_and_notes() {
         s.grant_badge(alice.id, "x", Some("javascript:alert(1)"), by, "r", NOW)
             .await
             .unwrap(),
-        Err(ModError::Refused(
-            "The badge link must be an http or https URL."
-        ))
+        Err(ModError::Refused("The badge link must be an https URL."))
     );
     let badges = s.badges(&[alice.id]).await.unwrap();
     assert_eq!(badges.len(), 1);
