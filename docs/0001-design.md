@@ -4,7 +4,7 @@ Threaded (`threaded.at`) is a link aggregator. People share links and text
 posts, tag them, vote, and discuss them in threaded comments. Anyone with an
 atproto account can sign in: no passwords, no local accounts.
 
-Every threshold below is a setting.
+Every threshold is a setting.
 
 ## 1. Principles
 
@@ -132,7 +132,7 @@ Before redirecting, it shows where the user is going:
 > **Sign in at bsky.social**
 >
 > Your account @alice.example.com is hosted at **bsky.social**. You will sign
-> in there, and it will ask whether Threaded may post to your account. Threaded
+> in there, and it will show what Threaded is asking permission for. Threaded
 > never sees your password. When you finish, you come back to threaded.at.
 >
 > Before you type your password, check that your browser's address bar shows
@@ -530,7 +530,7 @@ spam verdict becomes a suggestion.
 
 ### 9.3 Moderator actions
 
-Every action below writes a `mod_log` row with moderator, target, and reason.
+Every moderator action writes a `mod_log` row with moderator, target, and reason.
 `/moderations` lists the log publicly; automated holds appear with "triage" as
 the actor and the rule cited.
 

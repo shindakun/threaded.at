@@ -1,8 +1,8 @@
 # Deploying threaded.at
 
 Threaded runs on one DigitalOcean droplet: a single binary under systemd,
-behind nginx, with SQLite on local disk. The files this document installs are
-in `deploy/`.
+behind nginx, with SQLite on local disk. Every installed file is in
+`deploy/`.
 
 ## What runs where
 
@@ -26,7 +26,7 @@ The service's working directory is the checkout, so its default blog folder,
 - Ubuntu 22.04 or later, with nginx from Ubuntu's packages. Other sites on the
   same nginx are fine: Threaded's config only answers for `threaded.at`.
 - Turn on droplet backups.
-- A sudo user for everything below; this document calls it the deploy user.
+- A sudo user, the deploy user, for every step.
 - DNS: an `A` record (and `AAAA` if the droplet has IPv6) for `threaded.at`
   pointing at the droplet.
 - Firewall: a DigitalOcean Cloud Firewall allowing inbound 22, 80, and 443
