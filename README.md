@@ -13,6 +13,8 @@ records in the author's own repo.
 - [docs/0005-m3.md](docs/0005-m3.md): the M3 plan, moderation.
 - [lexicons/at/threaded/](lexicons/at/threaded/): the submission, comment, and
   public vote schemas.
+- [HUMANS.md](HUMANS.md): the standard for LLM-assisted contributions.
+- [AGENTS.md](AGENTS.md): the project guide for coding agents.
 
 ## Status
 
