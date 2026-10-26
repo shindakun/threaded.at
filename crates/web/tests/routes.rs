@@ -13,7 +13,7 @@ const NOW: i64 = 1_790_000_000;
 async fn app() -> (axum::Router, String) {
     let store = Store::open("sqlite::memory:").await.unwrap();
     let u = store
-        .upsert_user("did:plc:alice", "alice.example", NOW)
+        .record_sign_in("did:plc:alice", "alice.example", true, NOW)
         .await
         .unwrap();
     store

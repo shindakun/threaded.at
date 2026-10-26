@@ -6,7 +6,7 @@
 {% if rows.is_empty() %}<p class="empty">No actions yet.</p>{% else %}
 <ol class="modlog">
 {% for l in rows %}
-<li><p><span class="meta">{{ l.when }}</span> {{ l.who }}: {{ l.action }}{% if let Some((href, text)) = l.target %}, <a href="{{ href }}">{{ text }}</a>{% endif %}{% if let Some(u) = l.user %} by <a href="/u/{{ u }}">{{ u }}</a>{% endif %}</p>
+<li><p><span class="meta">{{ l.when }}</span> {{ l.who }}: {{ l.action }}{% if let Some((href, text)) = l.target %}, <a href="{{ href }}">{{ text }}</a>{% endif %}{% if let (Some(u), Some(d)) = (l.user.as_ref(), l.user_did.as_ref()) %} by <a href="/u/{{ d }}">{{ u }}</a>{% endif %}</p>
 {% if !l.reason.is_empty() %}<p class="reason">{{ l.reason }}</p>{% endif %}
 {% if !l.detail.is_empty() %}<p class="meta">{{ l.detail }}</p>{% endif %}</li>
 {% endfor %}

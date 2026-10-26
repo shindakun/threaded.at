@@ -13,7 +13,7 @@
 <li><article class="queue-row" aria-labelledby="t-{{ v.id }}">
   <h2 id="t-{{ v.id }}"><a href="{{ r.item_href() }}">{% if r.kind == "comment" %}Comment on {% endif %}{{ r.title }}</a></h2>
   {% if !r.excerpt.is_empty() %}<p class="excerpt">{{ r.excerpt }}</p>{% endif %}
-  <p class="meta">by <a href="/mod/u/{{ r.author }}">{{ r.author }}</a>, karma {{ r.author_karma }}, here {{ r.tenure }} | {{ r.age }}</p>
+  <p class="meta">by <a href="/mod/u/{{ r.author_did }}">{{ r.author }}</a>, karma {{ r.author_karma }}, here {{ r.tenure }} | {{ r.age }}</p>
   {% include "verdict.html" %}
   {% for (d, label) in v.choices() %}
   <form method="post" action="/mod/verdicts/{{ v.id }}" class="inline-form">
@@ -36,7 +36,7 @@
 {% for e in edits %}
 <li><article class="queue-row" aria-labelledby="e-{{ e.id }}">
   <h2 id="e-{{ e.id }}"><a href="/s/{{ e.story_short_id }}">{{ e.current_title }}</a></h2>
-  <p class="meta">Suggested by <a href="/mod/u/{{ e.by }}">{{ e.by }}</a>, {{ e.age }}</p>
+  <p class="meta">Suggested by <a href="/mod/u/{{ e.by_did }}">{{ e.by }}</a>, {{ e.age }}</p>
   <dl class="facts">
     {% if let Some(t) = e.title %}<dt>Title</dt><dd>{{ e.current_title }} <span aria-hidden="true">&rarr;</span><span class="vh">changes to</span> {{ t }}</dd>{% endif %}
     {% if let Some(t) = e.tags %}<dt>Tags</dt><dd>{{ e.current_tags }} <span aria-hidden="true">&rarr;</span><span class="vh">change to</span> {{ t }}</dd>{% endif %}
@@ -62,7 +62,7 @@
 <li><article class="queue-row" aria-labelledby="q-{{ r.short_id }}">
   <h2 id="q-{{ r.short_id }}"><a href="{{ r.item_href() }}">{% if r.kind == "comment" %}Comment on {% endif %}{{ r.title }}</a></h2>
   {% if !r.excerpt.is_empty() %}<p class="excerpt">{{ r.excerpt }}</p>{% endif %}
-  <p class="meta">by <a href="/mod/u/{{ r.author }}">{{ r.author }}</a>, karma {{ r.author_karma }}, here {{ r.tenure }} | {{ r.age }} | score {{ r.score }}</p>
+  <p class="meta">by <a href="/mod/u/{{ r.author_did }}">{{ r.author }}</a>, karma {{ r.author_karma }}, here {{ r.tenure }} | {{ r.age }} | score {{ r.score }}</p>
   {% if !r.flags.is_empty() %}<p class="meta">Flags: {% for f in r.flags %}{{ f.0 }} ({{ f.1 }}){% if !loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
   <p><a class="button-link" href="{{ r.review_href() }}">Review</a></p>
 </article></li>

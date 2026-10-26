@@ -200,6 +200,7 @@ pub struct LogRow {
     pub action: String,
     pub moderator: Option<String>,
     pub user_handle: Option<String>,
+    pub user_did: Option<String>,
     pub story_short_id: Option<String>,
     pub story_title: Option<String>,
     pub comment_short_id: Option<String>,
@@ -210,8 +211,9 @@ pub struct LogRow {
 }
 
 const LOG_COLUMNS: &str = "l.id, l.actor, l.action, \
-     (SELECT handle FROM users WHERE id = l.moderator_id) AS moderator, \
-     (SELECT handle FROM users WHERE id = l.user_id) AS user_handle, \
+     (SELECT CASE WHEN x.handle_verified THEN x.handle ELSE x.did END FROM users x WHERE x.id = l.moderator_id) AS moderator, \
+     (SELECT CASE WHEN x.handle_verified THEN x.handle ELSE x.did END FROM users x WHERE x.id = l.user_id) AS user_handle, \
+     (SELECT x.did FROM users x WHERE x.id = l.user_id) AS user_did, \
      coalesce(s.short_id, cs.short_id) AS story_short_id, coalesce(s.title, cs.title) AS story_title, \
      c.short_id AS comment_short_id, \
      (SELECT name FROM tags WHERE id = l.tag_id) AS tag_name, \
@@ -833,7 +835,7 @@ impl Store {
 
     pub async fn notes(&self, user_id: i64) -> Result<Vec<NoteRow>> {
         sqlx::query_as(
-            "SELECT u.handle AS moderator, n.note, n.created_at FROM mod_notes n \
+            "SELECT CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS moderator, n.note, n.created_at FROM mod_notes n \
              JOIN users u ON u.id = n.moderator_id WHERE n.user_id = ? ORDER BY n.created_at DESC, n.id DESC",
         )
         .bind(user_id)
@@ -909,7 +911,9 @@ pub struct QueueItem {
     pub body: String,
     pub url: Option<String>,
     pub author_id: i64,
+    /// The author's verified handle, or their DID.
     pub author: String,
+    pub author_did: String,
     pub author_karma: i64,
     pub author_since: i64,
     pub score: i64,
@@ -919,12 +923,12 @@ pub struct QueueItem {
 
 const QUEUE_STORY: &str =
     "SELECT 'story' AS kind, s.id, s.short_id, s.short_id AS story_short_id, \
-     s.title, s.body, s.url, s.user_id AS author_id, u.handle AS author, u.karma AS author_karma, \
+     s.title, s.body, s.url, s.user_id AS author_id, CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS author, u.did AS author_did, u.karma AS author_karma, \
      u.created_at AS author_since, s.score, s.flags, s.created_at \
      FROM stories s JOIN users u ON u.id = s.user_id";
 
 const QUEUE_COMMENT: &str = "SELECT 'comment' AS kind, c.id, c.short_id, s.short_id AS story_short_id, \
-     s.title, c.body, NULL AS url, c.user_id AS author_id, u.handle AS author, u.karma AS author_karma, \
+     s.title, c.body, NULL AS url, c.user_id AS author_id, CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS author, u.did AS author_did, u.karma AS author_karma, \
      u.created_at AS author_since, c.score, c.flags, c.created_at \
      FROM comments c JOIN users u ON u.id = c.user_id JOIN stories s ON s.id = c.story_id";
 
@@ -932,6 +936,7 @@ const QUEUE_COMMENT: &str = "SELECT 'comment' AS kind, c.id, c.short_id, s.short
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct FlagRow {
     pub handle: String,
+    pub did: String,
     pub reason: String,
     pub created_at: i64,
 }
@@ -991,7 +996,7 @@ impl Store {
     pub async fn flags_on(&self, target: crate::Target) -> Result<Vec<FlagRow>> {
         let (col, id) = crate::m2::target_cols(target);
         sqlx::query_as(&format!(
-            "SELECT u.handle, v.reason, v.created_at FROM votes v JOIN users u ON u.id = v.user_id \
+            "SELECT CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS handle, u.did, v.reason, v.created_at FROM votes v JOIN users u ON u.id = v.user_id \
              WHERE v.{col} = ? AND v.value = -1 ORDER BY v.created_at"
         ))
         .bind(id)
@@ -1245,19 +1250,21 @@ impl Store {
         .await
     }
 
-    /// Every active role badge with its holder's handle.
-    pub async fn badges_in_use(&self) -> Result<Vec<(String, Badge)>> {
-        let rows: Vec<(String, i64, i64, String, Option<String>)> = sqlx::query_as(
-            "SELECT u.handle, b.id, b.user_id, b.label, b.link FROM role_badges b \
+    /// Every active role badge with its holder's shown name and DID.
+    pub async fn badges_in_use(&self) -> Result<Vec<(String, String, Badge)>> {
+        let rows: Vec<(String, String, i64, i64, String, Option<String>)> = sqlx::query_as(
+            "SELECT CASE WHEN u.handle_verified THEN u.handle ELSE u.did END, u.did, \
+             b.id, b.user_id, b.label, b.link FROM role_badges b \
              JOIN users u ON u.id = b.user_id WHERE b.removed_at IS NULL ORDER BY b.label, u.handle",
         )
         .fetch_all(self.pool())
         .await?;
         Ok(rows
             .into_iter()
-            .map(|(h, id, user_id, label, link)| {
+            .map(|(name, did, id, user_id, label, link)| {
                 (
-                    h,
+                    name,
+                    did,
                     Badge {
                         id,
                         user_id,
@@ -1357,6 +1364,7 @@ pub struct SuggestionRow {
     pub title: Option<String>,
     pub tags: Option<String>,
     pub by_handle: String,
+    pub by_did: String,
     pub created_at: i64,
 }
 
@@ -1398,7 +1406,7 @@ impl Store {
             "SELECT g.id, g.story_id, s.short_id AS story_short_id, s.title AS current_title, \
              coalesce((SELECT group_concat(name, ' ') FROM (SELECT t.name FROM taggings tg \
                  JOIN tags t ON t.id = tg.tag_id WHERE tg.story_id = s.id ORDER BY t.name)), '') AS current_tags, \
-             g.title, g.tags, u.handle AS by_handle, g.created_at \
+             g.title, g.tags, CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS by_handle, u.did AS by_did, g.created_at \
              FROM suggestions g JOIN stories s ON s.id = g.story_id JOIN users u ON u.id = g.user_id \
              WHERE g.decision IS NULL AND s.deleted_at IS NULL AND s.removed_at IS NULL \
              AND s.merged_into IS NULL ORDER BY g.created_at, g.id",

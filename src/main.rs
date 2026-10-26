@@ -278,8 +278,10 @@ async fn seed(db: &str) -> Result<(), BoxError> {
     for (name, desc, m) in DEMO_TAGS {
         store.upsert_tag(name, desc, *m).await?;
     }
+    // Demo data: the handle is marked verified so the stories read normally;
+    // no real account holds it.
     let user = store
-        .upsert_user("did:plc:demo", "demo.example", now)
+        .record_sign_in("did:plc:demo", "demo.example", true, now)
         .await?;
     for (title, url, tags, age) in DEMO_STORIES {
         let l = url.map(link::parse).transpose()?;

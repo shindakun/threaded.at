@@ -89,6 +89,7 @@ pub struct QueueRow {
     pub title: String,
     pub excerpt: String,
     pub author: String,
+    pub author_did: String,
     pub author_karma: i64,
     pub tenure: String,
     pub score: i64,
@@ -142,6 +143,7 @@ async fn queue_row(st: &AppState, q: QueueItem, now: i64) -> Result<QueueRow, Ap
         story_short_id: q.story_short_id,
         title: q.title,
         author: q.author,
+        author_did: q.author_did,
         author_karma: q.author_karma,
         score: q.score,
         flags,
@@ -205,6 +207,7 @@ pub struct EditRow {
     pub title: Option<String>,
     pub tags: Option<String>,
     pub by: String,
+    pub by_did: String,
     pub age: String,
 }
 
@@ -290,6 +293,7 @@ pub async fn mod_queue(
                     title: g.title,
                     tags: g.tags,
                     by: g.by_handle,
+                    by_did: g.by_did,
                     age: ago(now - g.created_at),
                 })
                 .collect()
@@ -395,6 +399,7 @@ pub struct LogView {
     pub action: String,
     pub target: Option<(String, String)>,
     pub user: Option<String>,
+    pub user_did: Option<String>,
     pub reason: String,
     pub detail: String,
 }
@@ -419,6 +424,7 @@ fn log_view(r: LogRow, now: i64) -> LogView {
         action: r.action,
         target,
         user: r.user_handle,
+        user_did: r.user_did,
         reason: r.reason,
         detail: r.detail,
     }
@@ -426,6 +432,7 @@ fn log_view(r: LogRow, now: i64) -> LogView {
 
 pub struct FlagView {
     pub handle: String,
+    pub did: String,
     pub reason: String,
     pub age: String,
 }
@@ -486,6 +493,7 @@ async fn item_page(
         .into_iter()
         .map(|f| FlagView {
             handle: f.handle,
+            did: f.did,
             reason: reason_label(&f.reason),
             age: ago(now - f.created_at),
         })
@@ -787,17 +795,28 @@ struct UserPage {
     log: Vec<LogView>,
 }
 
+/// The user review page lives at `/mod/u/{did}`. A handle in the path only
+/// finds the account, then redirects to its DID, since a handle can pass to
+/// another account between loading the page and acting on it.
 pub async fn mod_user(
     State(st): State<AppState>,
     viewer: Viewer,
-    Path(handle): Path<String>,
+    Path(who): Path<String>,
     Query(q): Query<DoneQuery>,
-) -> Page {
-    let me = staff(&st, &viewer, Need::Moderator, &format!("/mod/u/{handle}")).await?;
+) -> Result<Response, AppError> {
+    let me = staff(&st, &viewer, Need::Moderator, &format!("/mod/u/{who}")).await?;
     let now = (st.clock)();
+    if !who.starts_with("did:") {
+        let u = st
+            .store
+            .user_by_handle(&who)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        return Ok(Redirect::to(&format!("/mod/u/{}", u.did)).into_response());
+    }
     let u = st
         .store
-        .user_by_handle(&handle)
+        .user_by_did(&who)
         .await?
         .ok_or(AppError::NotFound)?;
     let policy = st.policy();
@@ -847,7 +866,7 @@ pub async fn mod_user(
             nav: "mod",
             done: q.done.is_some(),
             can_ban: u.id != me.user.id && (u.role == "user" || me.is_admin()),
-            handle: u.handle.clone(),
+            handle: u.name().to_string(),
             did: u.did.clone(),
             role: u.role.clone(),
             level: lvl.as_str(),
@@ -869,7 +888,8 @@ pub async fn mod_user(
             log,
         }
         .render()?,
-    ))
+    )
+    .into_response())
 }
 
 #[derive(Deserialize)]
@@ -891,15 +911,21 @@ pub struct UserActionForm {
 pub async fn mod_user_action(
     State(st): State<AppState>,
     viewer: Viewer,
-    Path(handle): Path<String>,
+    Path(did): Path<String>,
     HtmlForm(f): HtmlForm<UserActionForm>,
 ) -> Result<Response, AppError> {
     check_csrf(&viewer, &f.csrf)?;
-    let back = format!("/mod/u/{handle}");
+    // Actions name their target by DID only, never by a handle.
+    if !did.starts_with("did:") {
+        return Err(AppError::Refused(
+            "Moderator actions name the account by DID, not by handle.".into(),
+        ));
+    }
+    let back = format!("/mod/u/{did}");
     let me = staff(&st, &viewer, Need::Moderator, &back).await?;
     let u = st
         .store
-        .user_by_handle(&handle)
+        .user_by_did(&did)
         .await?
         .ok_or(AppError::NotFound)?;
     let now = (st.clock)();

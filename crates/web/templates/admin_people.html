@@ -8,7 +8,7 @@
 <ul class="plain">
 {% for p in people %}
 <li>
-  <a href="/mod/u/{{ p.handle }}">{{ p.handle }}</a>, {{ p.role }} <code>{{ p.did }}</code>
+  <a href="/mod/u/{{ p.did }}">{{ p.handle }}</a>, {{ p.role }} <code>{{ p.did }}</code>
   {% if !p.is_me %}
   <form method="post" action="/admin/people" class="inline-form">
     <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
@@ -39,6 +39,6 @@
 </form>
 <h2>Role badges in use</h2>
 {% if badges.is_empty() %}<p class="empty">No badges.</p>{% else %}
-<ul class="plain">{% for b in badges %}<li><span class="badge">{{ b.1.label }}</span> <a href="/mod/u/{{ b.0 }}">{{ b.0 }}</a></li>{% endfor %}</ul>
+<ul class="plain">{% for b in badges %}<li><span class="badge">{{ b.2.label }}</span> <a href="/mod/u/{{ b.1 }}">{{ b.0 }}</a></li>{% endfor %}</ul>
 {% endif %}
 {% endblock %}

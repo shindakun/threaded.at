@@ -6,7 +6,7 @@
 <article class="review-item" aria-labelledby="item-h">
   <h2 id="item-h"><a href="{{ row.item_href() }}">{% if kind == "comment" %}Comment on {% endif %}{{ row.title }}</a></h2>
   {% if let Some(u) = url %}<p class="meta">{{ u }}</p>{% endif %}
-  <p class="meta">by <a href="/mod/u/{{ row.author }}">{{ row.author }}</a>, karma {{ row.author_karma }}, here {{ row.tenure }} | {{ row.age }} | score {{ row.score }}</p>
+  <p class="meta">by <a href="/mod/u/{{ row.author_did }}">{{ row.author }}</a>, karma {{ row.author_karma }}, here {{ row.tenure }} | {{ row.age }} | score {{ row.score }}</p>
   {% if let Some(r) = removed %}<p class="mod-status">Removed: {{ r }}</p>{% endif %}
   {% if held %}<p class="mod-status">Held for review by triage.</p>{% endif %}
   {% if let Some(m) = merged_into %}<p class="mod-status">Merged into <a href="/s/{{ m }}">/s/{{ m }}</a>.</p>{% endif %}
@@ -20,7 +20,7 @@
 
 <h2>Flags</h2>
 {% if flags.is_empty() %}<p class="empty">No flags.</p>{% else %}
-<ul class="plain">{% for f in flags %}<li>{{ f.reason }} by <a href="/mod/u/{{ f.handle }}">{{ f.handle }}</a>, {{ f.age }}</li>{% endfor %}</ul>
+<ul class="plain">{% for f in flags %}<li>{{ f.reason }} by <a href="/mod/u/{{ f.did }}">{{ f.handle }}</a>, {{ f.age }}</li>{% endfor %}</ul>
 {% endif %}
 
 <h2>Earlier versions</h2>

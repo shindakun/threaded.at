@@ -219,7 +219,8 @@ impl Store {
     }
 
     pub async fn user_by_handle(&self, handle: &str) -> Result<Option<UserRow>> {
-        sqlx::query_as("SELECT id, did, handle, handle_verified, role, karma, public_votes, vouched_by, created_at, banned_at, banned_reason FROM users WHERE handle = ? OR did = ?1 LIMIT 1")
+        sqlx::query_as("SELECT id, did, handle, handle_verified, role, karma, public_votes, vouched_by, created_at, banned_at, banned_reason FROM users WHERE did = ?1 OR (handle = ?1 AND handle_verified) \
+             ORDER BY did = ?1 DESC LIMIT 1")
             .bind(handle)
             .fetch_optional(&self.pool)
             .await

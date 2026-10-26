@@ -6,7 +6,7 @@ const T0: i64 = 1_790_000_000;
 async fn fixture() -> (Store, i64) {
     let s = Store::open("sqlite::memory:").await.unwrap();
     let alice = s
-        .upsert_user("did:plc:alice", "alice.example", T0)
+        .record_sign_in("did:plc:alice", "alice.example", true, T0)
         .await
         .unwrap();
     for t in ["rust", "databases", "show"] {
@@ -109,7 +109,7 @@ async fn hot_new_and_tag_listings() {
 async fn search_combines_text_and_filters() {
     let (s, u) = fixture().await;
     let bob = s
-        .upsert_user("did:plc:bob", "bob.example", T0)
+        .record_sign_in("did:plc:bob", "bob.example", true, T0)
         .await
         .unwrap();
     post(
@@ -245,4 +245,46 @@ async fn sign_in_records_and_display_names() {
         s.display_name("did:plc:new").await.unwrap().as_deref(),
         Some("did:plc:new")
     );
+}
+
+#[tokio::test]
+async fn an_unverified_handle_names_nobody() {
+    let s = Store::open("sqlite::memory:").await.unwrap();
+    s.upsert_tag("rust", "", 0.0).await.unwrap();
+    let u = s
+        .record_sign_in("did:plc:carol", "carol.example", false, T0)
+        .await
+        .unwrap();
+    post(
+        &s,
+        u,
+        "Carol's post",
+        Some("https://example.com/c"),
+        &["rust"],
+        T0,
+    )
+    .await;
+    let rows = s
+        .list(Listing::New, &Filter::default(), 10, 0)
+        .await
+        .unwrap();
+    assert_eq!(
+        rows[0].handle, "did:plc:carol",
+        "shown by DID until verified"
+    );
+    assert!(s.user_by_handle("carol.example").await.unwrap().is_none());
+    assert!(s.user_by_handle("did:plc:carol").await.unwrap().is_some());
+    let r = s
+        .search(&search::parse("submitter:@carol.example"), 10, 0)
+        .await
+        .unwrap();
+    assert!(
+        r.is_empty(),
+        "a search by an unverified handle finds nothing"
+    );
+    let r = s
+        .search(&search::parse("submitter:@did:plc:carol"), 10, 0)
+        .await
+        .unwrap();
+    assert_eq!(r.len(), 1, "a search by DID still works");
 }

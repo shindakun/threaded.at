@@ -14,11 +14,11 @@
   <dt>Flags given</dt><dd>{{ flags_given }}, of which {{ flags_upheld }} on items moderators removed</dd>
   {% if let Some(b) = banned %}<dt>Banned</dt><dd>{{ b }}</dd>{% endif %}
 </dl>
-<p><a href="/u/{{ handle }}">Public profile</a></p>
+<p><a href="/u/{{ did }}">Public profile</a></p>
 
 <h2>Notes</h2>
 <p class="hint">Private to moderators. Notes are not logged.</p>
-<form method="post" action="/mod/u/{{ handle }}" class="post-form">
+<form method="post" action="/mod/u/{{ did }}" class="post-form">
   <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
   <input type="hidden" name="action" value="note">
   <label for="note">Add a note</label>
@@ -31,7 +31,7 @@
 
 <h2>Ban</h2>
 {% if can_ban %}
-<form method="post" action="/mod/u/{{ handle }}" class="post-form">
+<form method="post" action="/mod/u/{{ did }}" class="post-form">
   <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
   <input type="hidden" name="action" value="{% if banned.is_some() %}unban{% else %}ban{% endif %}">
   {% if banned.is_none() %}<p class="hint">A banned account can read and sign in, and cannot post. Its existing posts stay unless you remove them.</p>{% endif %}
@@ -47,7 +47,7 @@
 {% if badges.is_empty() %}<p class="empty">No badges.</p>{% else %}
 <ul class="plain">{% for b in badges %}<li>
   <span class="badge">{{ b.label }}</span>{% if let Some(l) = b.link %} {{ l }}{% endif %}
-  <form method="post" action="/mod/u/{{ handle }}" class="inline-form">
+  <form method="post" action="/mod/u/{{ did }}" class="inline-form">
     <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
     <input type="hidden" name="action" value="unbadge">
     <input type="hidden" name="badge" value="{{ b.id }}">
@@ -57,7 +57,7 @@
   </form>
 </li>{% endfor %}</ul>
 {% endif %}
-<form method="post" action="/mod/u/{{ handle }}" class="post-form">
+<form method="post" action="/mod/u/{{ did }}" class="post-form">
   <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
   <input type="hidden" name="action" value="badge">
   <h3>Grant a badge</h3>

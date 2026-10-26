@@ -347,7 +347,7 @@ struct PeoplePage {
     nav: &'static str,
     done: bool,
     people: Vec<PersonRow>,
-    badges: Vec<(String, threaded_store::Badge)>,
+    badges: Vec<(String, String, threaded_store::Badge)>,
 }
 
 pub async fn people_page(
@@ -363,7 +363,7 @@ pub async fn people_page(
         .into_iter()
         .map(|u| PersonRow {
             is_me: u.id == me.user.id,
-            handle: u.handle,
+            handle: u.name().to_string(),
             did: u.did,
             role: u.role,
         })

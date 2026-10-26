@@ -100,7 +100,7 @@ pub struct NewStory<'a> {
 
 const STORY_COLUMNS: &str =
     "s.id, s.short_id, s.title, s.url, s.domain, s.score, s.comment_count, \
-     s.created_at, u.handle, s.body, s.user_id, u.did AS author_did, s.user_is_author, s.flags, \
+     s.created_at, CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS handle, s.body, s.user_id, u.did AS author_did, s.user_is_author, s.flags, \
      s.edited_at, s.locked, s.at_uri, s.at_cid, s.removed_at, s.removed_reason, s.held_at, \
      (SELECT m.short_id FROM stories m WHERE m.id = s.merged_into) AS merged_into, \
      s.locked_reason, s.override_by IS NOT NULL AS mod_edited, \
@@ -153,7 +153,8 @@ impl Store {
         verified: bool,
         now: i64,
     ) -> Result<i64> {
-        sqlx::query_scalar(
+        let mut tx = self.pool.begin().await?;
+        let id = sqlx::query_scalar(
             "INSERT INTO users (did, handle, handle_verified, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?4) \
              ON CONFLICT(did) DO UPDATE SET handle = excluded.handle, handle_verified = excluded.handle_verified, \
              last_seen_at = excluded.last_seen_at RETURNING id",
@@ -162,8 +163,11 @@ impl Store {
         .bind(handle)
         .bind(verified)
         .bind(now)
-        .fetch_one(&self.pool)
-        .await
+        .fetch_one(&mut *tx)
+        .await?;
+        claim_handle(&mut tx, did, handle, verified).await?;
+        tx.commit().await?;
+        Ok(id)
     }
 
     /// The name to show for a signed-in DID: the verified handle, or the DID.
@@ -242,7 +246,7 @@ impl Store {
             push_domain(&mut qb, d, true);
         }
         if let Some(h) = &f.submitter {
-            qb.push(" AND u.handle = ").push_bind(h.clone());
+            push_user(&mut qb, "u", h);
         }
         match listing {
             Listing::Front => qb.push(" ORDER BY s.rank DESC"),
@@ -288,15 +292,15 @@ impl Store {
             push_domain(&mut qb, d, false);
         }
         if let Some(h) = &q.submitter {
-            qb.push(" AND u.handle = ").push_bind(h.clone());
+            push_user(&mut qb, "u", h);
         }
         if let Some(h) = &q.commenter {
             qb.push(
                 " AND EXISTS (SELECT 1 FROM comments c JOIN users cu ON cu.id = c.user_id \
-                 WHERE c.story_id = s.id AND c.deleted_at IS NULL AND cu.handle = ",
-            )
-            .push_bind(h.clone())
-            .push(")");
+                 WHERE c.story_id = s.id AND c.deleted_at IS NULL",
+            );
+            push_user(&mut qb, "cu", h);
+            qb.push(")");
         }
         match (q.sort, fts.is_some()) {
             (Sort::Relevance, true) => qb.push(" ORDER BY bm25(stories_fts, 10.0, 1.0, 2.0, 2.0)"),
@@ -309,6 +313,18 @@ impl Store {
             .push_bind(offset);
         qb.build_query_as().fetch_all(&self.pool).await
     }
+}
+
+/// Matches a user by DID, or by handle only while it is verified: a handle can
+/// pass to another account, so an unverified one names nobody.
+fn push_user(qb: &mut QueryBuilder<'_, Sqlite>, alias: &str, who: &str) {
+    qb.push(format!(" AND ({alias}.did = "))
+        .push_bind(who.to_string())
+        .push(format!(
+            " OR ({alias}.handle_verified AND {alias}.handle = "
+        ))
+        .push_bind(who.to_string())
+        .push("))");
 }
 
 fn push_has_tag(qb: &mut QueryBuilder<'_, Sqlite>, tag: &str, has: bool) {
@@ -416,4 +432,25 @@ pub(crate) async fn insert_story_tx(
     }
 
     Ok((story_id, short_id))
+}
+
+/// A verified handle belongs to one DID at a time. When `did` verifies
+/// `handle`, any other account still holding it loses the verification and
+/// shows its DID until it verifies a handle of its own again.
+pub(crate) async fn claim_handle(
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    did: &str,
+    handle: &str,
+    verified: bool,
+) -> Result<()> {
+    if verified {
+        sqlx::query(
+            "UPDATE users SET handle_verified = 0 WHERE handle = ? AND did <> ? AND handle_verified",
+        )
+        .bind(handle)
+        .bind(did)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
 }

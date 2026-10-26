@@ -73,5 +73,5 @@ for tab in edits holds suggestions; do
 done
 curl -fs -H "Cookie: $cookie" "$base/s/$theirs/suggest" >/dev/null || { echo "the suggest page refused the fixture user"; exit 1; }
 A11Y_COOKIE="$cookie" node "$here/audit.mjs" "$base" / "$mine" "$mine/edit" /submit "/c/$comment/reply" "/c/$comment/edit" /settings /u/a11y.example /u/other.example \
-  /mod "/mod/s/$sid" /mod/c/"$comment" /mod/u/other.example /moderations /admin /admin/settings /admin/tags /admin/people \
+  /mod "/mod/s/$sid" /mod/c/"$comment" /mod/u/did:plc:a11yother /moderations /admin /admin/settings /admin/tags /admin/people \
   "/mod?tab=edits" "/s/$theirs/suggest" "/mod?tab=holds" "/mod?tab=suggestions" /admin/rules /moderations/stats

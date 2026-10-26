@@ -133,7 +133,7 @@ const VERDICT_COLUMNS: &str = "v.id, v.story_id, v.comment_id, v.verdict, v.rule
 impl Store {
     pub async fn current_rules(&self) -> Result<Option<RulesVersion>> {
         sqlx::query_as(
-            "SELECT r.id, r.body, u.handle AS author, r.created_at FROM rules_versions r \
+            "SELECT r.id, r.body, CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS author, r.created_at FROM rules_versions r \
              LEFT JOIN users u ON u.id = r.author_id ORDER BY r.id DESC LIMIT 1",
         )
         .fetch_optional(self.pool())
@@ -142,7 +142,7 @@ impl Store {
 
     pub async fn rules_history(&self) -> Result<Vec<RulesVersion>> {
         sqlx::query_as(
-            "SELECT r.id, r.body, u.handle AS author, r.created_at FROM rules_versions r \
+            "SELECT r.id, r.body, CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS author, r.created_at FROM rules_versions r \
              LEFT JOIN users u ON u.id = r.author_id ORDER BY r.id DESC",
         )
         .fetch_all(self.pool())

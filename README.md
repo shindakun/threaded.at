@@ -144,7 +144,7 @@ section 12. A file that fails to parse is skipped and the reason is logged.
 | `/settings` | Public upvotes; keeping your posts out of AI triage (form target `/settings/triage`) |
 | `/s/{short_id}/suggest` | Suggest a story's title and tags |
 | `/mod` | Moderation queue: Holds, Flagged, Suggestions, Edits; form targets `/mod/verdicts/{id}` and `/mod/suggestions/{id}` |
-| `/mod/s/{short_id}`, `/mod/c/{short_id}`, `/mod/u/{handle}` | Review a story, comment, or user, and act on it |
+| `/mod/s/{short_id}`, `/mod/c/{short_id}`, `/mod/u/{did}` | Review a story, comment, or user, and act on it; a handle in `/mod/u/` redirects to the DID |
 | `/moderations` | The public moderation log |
 | `/moderations/stats` | How often moderators agreed with AI triage |
 | `/admin`, `/admin/rules`, `/admin/tags`, `/admin/people`, `/admin/settings` | Health, site rules, tags, roles, and settings; form target `/admin/breaker` |

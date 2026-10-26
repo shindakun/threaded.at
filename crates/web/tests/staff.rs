@@ -320,13 +320,13 @@ async fn bans_badges_notes_and_the_flagged_queue() {
     assert!(q.contains("A story") && q.contains("Spam (3)"), "{q}");
     let review = w.get(&format!("/mod/s/{id}"), &moderator).await.body;
     assert!(
-        review.contains("Spam by <a href=\"/mod/u/bob.example\">bob.example</a>"),
+        review.contains("Spam by <a href=\"/mod/u/did:plc:bob\">bob.example</a>"),
         "moderators see flaggers"
     );
 
     let r = w
         .post(
-            "/mod/u/alice.example",
+            "/mod/u/did:plc:alice",
             &moderator,
             &[
                 ("action", "badge"),
@@ -338,7 +338,7 @@ async fn bans_badges_notes_and_the_flagged_queue() {
         .await;
     assert_eq!(r.status, StatusCode::SEE_OTHER, "{}", r.body);
     w.post(
-        "/mod/u/alice.example",
+        "/mod/u/did:plc:alice",
         &moderator,
         &[("action", "note"), ("note", "Watch the next submission.")],
     )
@@ -348,11 +348,11 @@ async fn bans_badges_notes_and_the_flagged_queue() {
         front.contains(r#"<a class="badge" href="https://e.example/p">Maintainer</a>"#),
         "{front}"
     );
-    let review = w.get("/mod/u/alice.example", &moderator).await.body;
+    let review = w.get("/mod/u/did:plc:alice", &moderator).await.body;
     assert!(review.contains("Watch the next submission."));
 
     w.post(
-        "/mod/u/alice.example",
+        "/mod/u/did:plc:alice",
         &moderator,
         &[("action", "ban"), ("reason", "Spam account")],
     )
@@ -380,7 +380,7 @@ async fn bans_badges_notes_and_the_flagged_queue() {
 #[tokio::test]
 async fn moderator_forms_need_the_csrf_token() {
     let (w, _author, _reader, moderator, id) = setup().await;
-    for uri in [format!("/mod/s/{id}"), "/mod/u/alice.example".to_string()] {
+    for uri in [format!("/mod/s/{id}"), "/mod/u/did:plc:alice".to_string()] {
         let r = w
             .send(
                 axum::http::Request::post(uri.as_str())
@@ -506,4 +506,84 @@ async fn error_pages_keep_the_signed_in_header() {
     }
     let signed_out = w.get("/s/nope00", "").await;
     assert!(signed_out.body.contains(r#"<a href="/login">Sign in</a>"#));
+}
+
+#[tokio::test]
+async fn moderator_actions_name_the_account_by_did_not_by_handle() {
+    let w = world().await;
+    let moderator = w.user("mod.example", &base(), 100, 0).await;
+    w.role("mod.example", "moderator").await;
+    w.user("alice.example", &base(), 100, 0).await;
+
+    // A handle in the address only finds the account, then moves to its DID.
+    let r = w.get("/mod/u/alice.example", &moderator).await;
+    assert_eq!(r.location.as_deref(), Some("/mod/u/did:plc:alice"));
+    let page = w.get("/mod/u/did:plc:alice", &moderator).await.body;
+    assert!(
+        page.contains(r#"action="/mod/u/did:plc:alice""#),
+        "forms post to the DID"
+    );
+
+    // An action addressed by handle is refused, whoever holds the handle now.
+    let r = w
+        .post(
+            "/mod/u/alice.example",
+            &moderator,
+            &[("action", "ban"), ("reason", "Spam")],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    assert!(r.body.contains("by DID, not by handle"), "{}", r.body);
+    let banned: Option<i64> =
+        sqlx::query_scalar("SELECT banned_at FROM users WHERE did = 'did:plc:alice'")
+            .fetch_one(w.store.pool())
+            .await
+            .unwrap();
+    assert_eq!(banned, None);
+}
+
+#[tokio::test]
+async fn a_handle_belongs_to_whichever_account_verified_it_last() {
+    let w = world().await;
+    let moderator = w.user("mod.example", &base(), 100, 0).await;
+    w.role("mod.example", "moderator").await;
+    w.user("alice.example", &base(), 100, 0).await;
+    let id = w
+        .submit(
+            &w.user("alice.example", &base(), 100, 0).await,
+            "Alice's story",
+            "https://e.example/a",
+            &["rust"],
+        )
+        .await;
+
+    // alice.example moves to a different account.
+    w.store
+        .record_sign_in("did:plc:newowner", "alice.example", true, NOW)
+        .await
+        .unwrap();
+    let old: (String, bool) =
+        sqlx::query_as("SELECT handle, handle_verified FROM users WHERE did = 'did:plc:alice'")
+            .fetch_one(w.store.pool())
+            .await
+            .unwrap();
+    assert_eq!(
+        old,
+        ("alice.example".to_string(), false),
+        "the old holder loses the verification"
+    );
+
+    // The handle now finds the new owner; the old account shows its DID.
+    let r = w.get("/mod/u/alice.example", &moderator).await;
+    assert_eq!(r.location.as_deref(), Some("/mod/u/did:plc:newowner"));
+    let story = w.get(&format!("/s/{id}"), "").await.body;
+    assert!(
+        story.contains(r#"<a class="handle" href="/u/did:plc:alice">did:plc:alice</a>"#),
+        "{story}"
+    );
+    let profile = w.get("/u/alice.example", "").await.body;
+    assert!(
+        !profile.contains("Alice&#39;s story") && !profile.contains("Alice's story"),
+        "the new owner's profile does not show the old owner's posts"
+    );
 }
