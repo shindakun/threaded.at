@@ -300,8 +300,10 @@ The database is an index over records, plus the private tables in §3.1.
    request.
 2. **hydrant.** A [hydrant](https://hydrant.klbr.net) indexer runs beside
    Threaded in `filter` mode. `FILTER_SIGNALS` lists the exact NSIDs
-   `at.threaded.submission` and `at.threaded.comment`, and `collections` is
-   `at.threaded.*`. hydrant finds accounts two ways: live commits that touch a
+   `at.threaded.submission` and `at.threaded.comment`, and `collections` lists
+   those two and `at.threaded.vote`. The list is exact, not `at.threaded.*`:
+   a wildcard matches by prefix and would also store `at.threaded.dev.*`
+   records. hydrant finds accounts two ways: live commits that touch a
    signal collection, and its crawler's `com.atproto.sync.listReposByCollection`
    queries for accounts that already hold such records. The crawler rejects
    wildcard signals, so the signals stay exact. Every discovered account is

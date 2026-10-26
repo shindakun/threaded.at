@@ -1249,7 +1249,7 @@ strikethrough, and task lists.</pre>
       </div>
       <div class="grid g3" style="margin-bottom:14px">
         <div class="card"><span class="tag neu">process</span><h3>threaded</h3><p>Web server, stream consumer, triage worker. Reads and writes the SQLite file; reads the blog folder.</p></div>
-        <div class="card"><span class="tag neu">process</span><h3>hydrant</h3><p>Indexes and backfills <code>at.threaded.*</code> records into its own database. Talks to threaded over a Unix socket.</p></div>
+        <div class="card"><span class="tag neu">process</span><h3>hydrant</h3><p>Indexes and backfills <code>at.threaded</code> submissions, comments, and votes into its own database. Talks to threaded over a Unix socket.</p></div>
         <div class="card"><span class="tag neu">files</span><h3>Blog folder</h3><p>Markdown posts with YAML front matter. Picked up within a second of any change.</p></div>
       </div>
       <div class="grid g4">
@@ -1264,7 +1264,7 @@ strikethrough, and task lists.</pre>
           <tbody>
             <tr><td>OAuth</td><td>jacquard-oauth and jacquard-axum 0.12.2</td></tr>
             <tr><td>Markdown</td><td>pulldown-cmark, sanitized by ammonia</td></tr>
-            <tr><td>Ingest</td><td>hydrant in filter mode on <code>at.threaded.*</code>: backfill plus an ordered stream, cursor stored</td></tr>
+            <tr><td>Ingest</td><td>hydrant in filter mode on the three exact <code>at.threaded</code> record types: backfill plus an ordered stream, cursor stored</td></tr>
             <tr><td>Triage</td><td><code>claude-opus-5-5</code> at low effort, structured output, cached rules prompt</td></tr>
             <tr><td>Lexicons</td><td><code>lexicons/at/threaded/</code>, linted with <code>goat lex lint</code></td></tr>
             <tr><td>CSRF, XSS</td><td>SameSite cookies plus form token; auto-escaping; strict CSP</td></tr>
