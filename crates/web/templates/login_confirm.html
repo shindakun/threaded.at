@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Sign in at {{ host.ascii }} | {{ site }}{% endblock %}
+{% block main %}
+<h1>Sign in at {{ host.ascii }}</h1>
+{% if changed %}<p class="notice" role="status">The sign-in server for this account changed. Check the address below before you continue.</p>{% endif %}
+<p class="lead">{% if let Some(a) = account %}Your account <b>{{ a }}</b> is hosted at <b>{{ host.ascii }}</b>. You will sign in there, and it{% else %}You will sign in at <b>{{ host.ascii }}</b>, and it{% endif %} will show what {{ site }} is asking permission for. {{ site }} never sees your password. When you finish, you come back to {{ site }}.</p>
+{% if let Some(u) = host.unicode %}<p class="hint">{{ host.ascii }} is the internationalized address {{ u }}.</p>{% endif %}
+{% if let Some(p) = pds %}<p class="hint">Account data stored at {{ p.ascii }}</p>{% endif %}
+<p class="check">Before you type your password, check that your browser's address bar shows <b>{{ host.ascii }}</b>.</p>
+<form method="post" action="/login/go" class="go">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <input type="hidden" name="identifier" value="{{ identifier }}">
+  <input type="hidden" name="host" value="{{ host.ascii }}">
+  <input type="hidden" name="next" value="{{ next }}">
+  <button type="submit" class="primary">Continue to {{ host.ascii }}</button>
+</form>
+<p><a href="/login">Use a different account</a></p>
+{% endblock %}

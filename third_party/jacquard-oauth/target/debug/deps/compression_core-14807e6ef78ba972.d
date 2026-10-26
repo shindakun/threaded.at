@@ -1,0 +1,10 @@
+/Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/deps/compression_core-14807e6ef78ba972.d: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/level.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/unshared.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/util.rs
+
+/Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/deps/libcompression_core-14807e6ef78ba972.rlib: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/level.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/unshared.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/util.rs
+
+/Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/deps/libcompression_core-14807e6ef78ba972.rmeta: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/level.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/unshared.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/util.rs
+
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/lib.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/level.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/unshared.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.34/src/util.rs:

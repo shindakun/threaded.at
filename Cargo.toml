@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/*"]
+exclude = ["third_party"]
 default-members = [".", "crates/*"]
 
 [workspace.package]
@@ -16,13 +17,20 @@ license.workspace = true
 
 [dependencies]
 axum = "0.8.9"
+threaded-auth = { version = "0.1.0", path = "crates/auth" }
 threaded-core = { version = "0.1.0", path = "crates/core" }
 threaded-store = { version = "0.1.0", path = "crates/store" }
 threaded-web = { version = "0.1.0", path = "crates/web" }
-tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [profile.release]
 lto = true
 strip = true
+
+# jacquard 0.12.2 on the RustCrypto 0.14 curves, so crypto-bigint is past
+# RUSTSEC-2026-0387. See third_party/README.md.
+[patch.crates-io]
+jacquard-common = { path = "third_party/jacquard-common" }
+jacquard-oauth = { path = "third_party/jacquard-oauth" }

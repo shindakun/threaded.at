@@ -91,10 +91,18 @@ cross-posting runs a second authorization with the larger scope set.
 
 ### 2.4 Library
 
-`jacquard-oauth` and `jacquard-axum` 0.12.2 (MPL-2.0). They implement the
-confidential client (`Keyset`, `private_key_jwt`), DPoP nonce handling, and
-axum extractors for browser sessions. Both build on the stable toolchain.
-Threaded supplies a SQLite-backed `ClientAuthStore`.
+`jacquard-oauth` 0.12.2 (MPL-2.0) implements the confidential client
+(`Keyset`, `private_key_jwt`) and DPoP nonce handling, and builds on the stable
+toolchain. Threaded supplies a SQLite-backed `ClientAuthStore` in
+`crates/auth`.
+
+Threaded builds `jacquard-common` and `jacquard-oauth` from patched copies in
+`third_party/` on the RustCrypto 0.14 curves, which keeps `crypto-bigint` past
+RUSTSEC-2026-0387. `third_party/README.md` lists the changes.
+
+The pushed authorization request sends the client configuration's whole scope
+list. Each scope set in §2.2 is therefore its own client configuration, all
+published under the one metadata document.
 
 ### 2.5 Local development
 
@@ -740,8 +748,10 @@ lexicons/             at.threaded.* schemas.
 - The stream consumer and the triage worker are tasks in the `threaded`
   process. Triage reads from a queue table, so a restart loses
   nothing.
-- Pages render on the server. Forms work without JavaScript. Small vanilla
-  scripts add in-place voting and keyboard navigation.
+- Pages render on the server. Forms work without JavaScript.
+- Frontend JavaScript is vanilla: small scripts in `crates/web/static/`, served
+  as written. No framework, no build step, no npm packages in the browser.
+  Each script enhances a page that already works without it.
 - Markdown renders with `pulldown-cmark`, then `ammonia` sanitizes the HTML.
   Rendered HTML is cached on the row.
 - Times are unix seconds. Short IDs are six random base-36 characters.
@@ -758,6 +768,7 @@ lexicons/             at.threaded.* schemas.
 | Abuse | Per-DID and per-IP rate limits; level-based limits in §8 |
 | Token theft | OAuth tokens, DPoP keys, and the Anthropic API key never reach the browser |
 | Key compromise | Remove the key from the JWKS; sessions bound to it end |
+| Dependencies | `cargo audit` in CI fails on any vulnerability; a vulnerable dependency is upgraded or patched in `third_party/`, never ignored |
 
 ## 15. Data model
 
@@ -784,7 +795,7 @@ Later migrations add `oauth_sessions`, `oauth_states`, `suggestions`,
 | Milestone | Scope | State |
 |---|---|---|
 | M0 Scaffold | Workspace, schema, ranking, levels, search parser, link canonicalization, read-only listings, search, tag and domain pages, blog, lexicon drafts, accessibility audit | Built |
-| M1 Sign-in | OAuth confidential client, metadata and JWKS endpoints, SQLite auth store, sessions, handle verification, sign-in form with handle lookahead, localhost dev flow | |
+| M1 Sign-in | OAuth confidential client, metadata and JWKS endpoints, SQLite auth store, sessions, handle verification, sign-in form with handle lookahead, localhost dev flow | Built |
 | M2 Writing | Submit, comment, upvote, flag; records to the PDS; public upvotes; Markdown; rate limits; levels enforced | |
 | M3 Moderation | Mod log, moderator queue and item and user review, admin pages, actions, notes, bans, merges, role badges, suggestions, AI triage | |
 | M4 Indexer | hydrant beside Threaded, stream consumer with cursor, backfill, edits, deletes, account events, records and votes from other apps | |

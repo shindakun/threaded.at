@@ -224,3 +224,23 @@ async fn story_lookup_by_short_id() {
     assert_eq!(s.story(&id).await.unwrap().unwrap().title, "Find me");
     assert!(s.story("zzzzzz").await.unwrap().is_none());
 }
+
+#[tokio::test]
+async fn sign_in_records_and_display_names() {
+    let s = Store::open("sqlite::memory:").await.unwrap();
+    assert_eq!(s.display_name("did:plc:new").await.unwrap(), None);
+    s.record_sign_in("did:plc:new", "new.example", true, T0)
+        .await
+        .unwrap();
+    assert_eq!(
+        s.display_name("did:plc:new").await.unwrap().as_deref(),
+        Some("new.example")
+    );
+    s.record_sign_in("did:plc:new", "did:plc:new", false, T0 + 1)
+        .await
+        .unwrap();
+    assert_eq!(
+        s.display_name("did:plc:new").await.unwrap().as_deref(),
+        Some("did:plc:new")
+    );
+}

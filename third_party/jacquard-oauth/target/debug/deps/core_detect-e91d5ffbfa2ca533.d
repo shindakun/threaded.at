@@ -1,0 +1,11 @@
+/Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/deps/core_detect-e91d5ffbfa2ca533.d: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/macros.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/arch/x86.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/os/x86.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/cache.rs
+
+/Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/deps/libcore_detect-e91d5ffbfa2ca533.rlib: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/macros.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/arch/x86.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/os/x86.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/cache.rs
+
+/Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/deps/libcore_detect-e91d5ffbfa2ca533.rmeta: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/macros.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/arch/x86.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/os/x86.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/cache.rs
+
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/lib.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/macros.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/arch/x86.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/os/x86.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core_detect-1.0.0/src/cache.rs:

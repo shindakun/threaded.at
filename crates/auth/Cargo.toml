@@ -1,0 +1,28 @@
+[package]
+name = "threaded-auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+idna = "1.1.0"
+jacquard-common = "0.12.2"
+jacquard-identity = "0.12.2"
+jacquard-oauth = "0.12.2"
+rand = "0.9"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+serde_json = "1.0.154"
+smol_str = "0.3"
+sqlx = { version = "0.8.6", default-features = false, features = ["sqlite", "runtime-tokio"] }
+thiserror = "2.0.21"
+tracing = "0.1.44"
+url = "2.5.8"
+
+[dev-dependencies]
+base64 = "0.23.1"
+jose-jwa = "0.1"
+jose-jwk = { version = "0.1", default-features = false }
+p256 = { version = "0.14", features = ["ecdsa"] }
+tempfile = "3.27.0"
+threaded-store = { path = "../store" }
+tokio = { version = "1.54.1", features = ["rt", "macros"] }

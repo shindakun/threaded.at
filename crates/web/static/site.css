@@ -161,3 +161,54 @@ h1 { font-size: 18px; margin: 4px 0 14px; }
 .prose table { border-collapse: collapse; }
 .prose th, .prose td { border: 1px solid var(--rule); padding: 4px 8px; text-align: left; }
 .back { margin-top: 28px; }
+
+.account { margin-left: auto; display: flex; align-items: baseline; gap: 10px; font-size: 14px; }
+.account form { display: inline; }
+.account a { color: var(--soft); }
+.who { color: var(--ink); font-weight: 600; }
+button.linkish { font: inherit; color: var(--soft); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+
+button.primary, button.secondary {
+  font: inherit;
+  min-height: 36px;
+  padding: 7px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+button.primary { background: var(--accent); color: var(--bg); border: 1px solid var(--accent); font-weight: 600; }
+button.secondary { background: var(--panel); color: var(--ink); border: 1px solid var(--field); }
+
+.login, .signup, .go { max-width: 32rem; }
+.login label { display: block; font-weight: 600; margin-bottom: 4px; }
+.login input[type="text"] {
+  width: 100%;
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--field);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+}
+.signup { margin-top: 18px; }
+.lead { max-width: 60ch; }
+.form-error { color: var(--ink); border-left: 3px solid var(--accent); padding: 6px 10px; background: var(--panel); max-width: 60ch; }
+.notice, .check { max-width: 60ch; border-left: 3px solid var(--accent); padding: 8px 12px; background: var(--panel); }
+
+.combo { position: relative; }
+.suggest {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--field);
+  border-radius: 8px;
+}
+.suggest li { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 4px 8px; border-radius: 5px; cursor: pointer; }
+.suggest li[aria-selected="true"], .suggest li:hover { background: var(--tag-bg); }
+.suggest img { border-radius: 50%; }
+.suggest .name { color: var(--ink); font-weight: 600; }
+.suggest .handle { color: var(--muted); }

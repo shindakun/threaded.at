@@ -1,0 +1,14 @@
+/Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/deps/ref_cast-6cb810ffc254741d.d: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/custom.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/layout.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/trivial.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/private.rs /Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/build/ref-cast-c4be7d80d793c45b/out/private.rs
+
+/Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/deps/libref_cast-6cb810ffc254741d.rlib: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/custom.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/layout.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/trivial.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/private.rs /Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/build/ref-cast-c4be7d80d793c45b/out/private.rs
+
+/Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/deps/libref_cast-6cb810ffc254741d.rmeta: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/custom.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/layout.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/trivial.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/private.rs /Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/build/ref-cast-c4be7d80d793c45b/out/private.rs
+
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/lib.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/custom.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/layout.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/trivial.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.27/src/private.rs:
+/Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/build/ref-cast-c4be7d80d793c45b/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/build/ref-cast-c4be7d80d793c45b/out

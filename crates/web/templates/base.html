@@ -19,6 +19,17 @@
     <a href="/search"{% if nav == "search" %} aria-current="page"{% endif %}>search</a>
     <a href="/blog"{% if nav == "blog" %} aria-current="page"{% endif %}>blog</a>
   </nav>
+  <div class="account">
+    {% if let Some(name) = viewer.name %}
+    <span class="who">{{ name }}</span>
+    <form method="post" action="/logout">
+      <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+      <button type="submit" class="linkish">Sign out</button>
+    </form>
+    {% else %}
+    <a href="/login">Sign in</a>
+    {% endif %}
+  </div>
 </header>
 <main id="main" tabindex="-1">
 {% block main %}{% endblock %}

@@ -1,3 +1,5 @@
+mod common;
+
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -35,6 +37,7 @@ async fn app() -> (axum::Router, String) {
         .await
         .unwrap();
     let state = AppState {
+        auth: common::auth(&store),
         store,
         blog: Arc::new(Blog::new("/nonexistent/blog", std::time::Duration::ZERO)),
         clock: Arc::new(|| NOW),

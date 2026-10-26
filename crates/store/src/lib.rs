@@ -87,6 +87,10 @@ impl Store {
         Ok(Store { pool })
     }
 
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
     pub async fn upsert_user(&self, did: &str, handle: &str, now: i64) -> Result<i64> {
         sqlx::query_scalar(
             "INSERT INTO users (did, handle, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?3) \
@@ -98,6 +102,38 @@ impl Store {
         .bind(now)
         .fetch_one(&self.pool)
         .await
+    }
+
+    /// Records a sign-in. `handle` is the verified handle, or the DID when the
+    /// handle does not verify.
+    pub async fn record_sign_in(
+        &self,
+        did: &str,
+        handle: &str,
+        verified: bool,
+        now: i64,
+    ) -> Result<i64> {
+        sqlx::query_scalar(
+            "INSERT INTO users (did, handle, handle_verified, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?4) \
+             ON CONFLICT(did) DO UPDATE SET handle = excluded.handle, handle_verified = excluded.handle_verified, \
+             last_seen_at = excluded.last_seen_at RETURNING id",
+        )
+        .bind(did)
+        .bind(handle)
+        .bind(verified)
+        .bind(now)
+        .fetch_one(&self.pool)
+        .await
+    }
+
+    /// The name to show for a signed-in DID: the verified handle, or the DID.
+    pub async fn display_name(&self, did: &str) -> Result<Option<String>> {
+        let row: Option<(String, bool)> =
+            sqlx::query_as("SELECT handle, handle_verified FROM users WHERE did = ?")
+                .bind(did)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row.map(|(h, ok)| if ok { h } else { did.to_string() }))
     }
 
     pub async fn upsert_tag(&self, name: &str, description: &str, rank_boost: f64) -> Result<i64> {

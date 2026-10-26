@@ -1,10 +1,11 @@
+pub mod auth;
 pub mod blog;
 
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use askama::Template;
-use axum::extract::{Path, Query, State};
+use axum::extract::{FromRef, Path, Query, State};
 use axum::http::{header, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
@@ -13,6 +14,7 @@ use serde::Deserialize;
 use threaded_core::search;
 use threaded_store::{Filter, Listing, Store, StoryRow};
 
+use crate::auth::{Auth, Viewer};
 use crate::blog::{Blog, Post};
 
 pub const SITE_NAME: &str = "Threaded";
@@ -23,14 +25,16 @@ const BLOG_PAGE_SIZE: usize = 10;
 pub struct AppState {
     pub store: Store,
     pub blog: Arc<Blog>,
+    pub auth: Arc<Auth>,
     pub clock: Arc<dyn Fn() -> i64 + Send + Sync>,
 }
 
 impl AppState {
-    pub fn new(store: Store, blog: Blog) -> AppState {
+    pub fn new(store: Store, blog: Blog, auth: Auth) -> AppState {
         AppState {
             store,
             blog: Arc::new(blog),
+            auth: Arc::new(auth),
             clock: Arc::new(|| {
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -38,6 +42,12 @@ impl AppState {
                     .unwrap_or(0)
             }),
         }
+    }
+}
+
+impl FromRef<AppState> for axum_extra::extract::cookie::Key {
+    fn from_ref(st: &AppState) -> Self {
+        st.auth.key.clone()
     }
 }
 
@@ -54,8 +64,21 @@ pub fn router(state: AppState) -> Router {
         .route("/tags", get(tags))
         .route("/blog", get(blog_index))
         .route("/blog/{slug}", get(blog_post))
+        .route("/login", get(auth::login).post(auth::login_submit))
+        .route("/login/go", axum::routing::post(auth::login_go))
+        .route("/login/typeahead", get(auth::typeahead))
+        .route("/oauth/callback", get(auth::callback))
+        .route("/oauth-client-metadata.json", get(auth::client_metadata))
+        .route("/oauth/jwks.json", get(auth::jwks))
+        .route("/logout", axum::routing::post(auth::logout))
         .route("/healthz", get(|| async { "ok" }))
         .route("/static/site.css", get(css))
+        .route("/static/login.js", get(login_js))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            auth::cookie_layer,
+        ))
+        .layer(tower_http::catch_panic::CatchPanicLayer::new())
         .with_state(state)
 }
 
@@ -106,6 +129,7 @@ pub fn ago(secs: i64) -> String {
 #[template(path = "list.html")]
 struct ListPage {
     site: &'static str,
+    viewer: Viewer,
     heading: String,
     hide_heading: bool,
     nav: &'static str,
@@ -119,6 +143,7 @@ struct ListPage {
 #[template(path = "story.html")]
 struct StoryPage {
     site: &'static str,
+    viewer: Viewer,
     nav: &'static str,
     s: StoryView,
 }
@@ -127,6 +152,7 @@ struct StoryPage {
 #[template(path = "search.html")]
 struct SearchPage {
     site: &'static str,
+    viewer: Viewer,
     nav: &'static str,
     q: String,
     searched: bool,
@@ -137,6 +163,7 @@ struct SearchPage {
 #[template(path = "tags.html")]
 struct TagsPage {
     site: &'static str,
+    viewer: Viewer,
     nav: &'static str,
     tags: Vec<(String, String)>,
 }
@@ -145,6 +172,7 @@ struct TagsPage {
 #[template(path = "blog_index.html")]
 struct BlogIndexPage {
     site: &'static str,
+    viewer: Viewer,
     nav: &'static str,
     posts: Vec<Arc<Post>>,
     page: usize,
@@ -156,6 +184,7 @@ struct BlogIndexPage {
 #[template(path = "blog_post.html")]
 struct BlogPostPage {
     site: &'static str,
+    viewer: Viewer,
     nav: &'static str,
     post: Arc<Post>,
 }
@@ -164,12 +193,14 @@ struct BlogPostPage {
 #[template(path = "error.html")]
 struct ErrorPage {
     site: &'static str,
+    viewer: Viewer,
     nav: &'static str,
     message: String,
 }
 
 pub enum AppError {
     NotFound,
+    Forbidden,
     Store(threaded_store::Error),
     Render(askama::Error),
 }
@@ -190,6 +221,10 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
             AppError::NotFound => (StatusCode::NOT_FOUND, "Not found.".to_string()),
+            AppError::Forbidden => (
+                StatusCode::FORBIDDEN,
+                "That form expired. Go back, reload the page, and try again.".to_string(),
+            ),
             AppError::Store(e) => {
                 tracing::error!(error = %e, "store");
                 (
@@ -207,6 +242,7 @@ impl IntoResponse for AppError {
         };
         let page = ErrorPage {
             site: SITE_NAME,
+            viewer: Viewer::default(),
             nav: "",
             message,
         };
@@ -217,7 +253,7 @@ impl IntoResponse for AppError {
     }
 }
 
-type Page = Result<Html<String>, AppError>;
+pub(crate) type Page = Result<Html<String>, AppError>;
 
 #[derive(Deserialize, Default)]
 struct PageParams {
@@ -249,7 +285,7 @@ impl<'a> Spec<'a> {
     }
 }
 
-async fn listing(st: &AppState, spec: Spec<'_>, page: Option<i64>) -> Page {
+async fn listing(st: &AppState, viewer: Viewer, spec: Spec<'_>, page: Option<i64>) -> Page {
     let page = page.unwrap_or(1).max(1);
     let now = (st.clock)();
     let rows = st
@@ -271,6 +307,7 @@ async fn listing(st: &AppState, spec: Spec<'_>, page: Option<i64>) -> Page {
     Ok(Html(
         ListPage {
             site: SITE_NAME,
+            viewer,
             hide_heading: spec.hide_heading,
             heading: spec.heading,
             nav: spec.nav,
@@ -283,35 +320,35 @@ async fn listing(st: &AppState, spec: Spec<'_>, page: Option<i64>) -> Page {
     ))
 }
 
-async fn front(State(st): State<AppState>, Query(p): Query<PageParams>) -> Page {
+async fn front(State(st): State<AppState>, viewer: Viewer, Query(p): Query<PageParams>) -> Page {
     let spec = Spec {
         nav: "front",
         heading: "Front page".into(),
         hide_heading: true,
         ..Spec::new(Listing::Front, "/")
     };
-    listing(&st, spec, p.page).await
+    listing(&st, viewer, spec, p.page).await
 }
 
-async fn newest(State(st): State<AppState>, Query(p): Query<PageParams>) -> Page {
+async fn newest(State(st): State<AppState>, viewer: Viewer, Query(p): Query<PageParams>) -> Page {
     let spec = Spec {
         nav: "newest",
         heading: "Newest".into(),
         ..Spec::new(Listing::New, "/newest")
     };
-    listing(&st, spec, p.page).await
+    listing(&st, viewer, spec, p.page).await
 }
 
-async fn active(State(st): State<AppState>, Query(p): Query<PageParams>) -> Page {
+async fn active(State(st): State<AppState>, viewer: Viewer, Query(p): Query<PageParams>) -> Page {
     let spec = Spec {
         nav: "active",
         heading: "Active discussions".into(),
         ..Spec::new(Listing::Active, "/active")
     };
-    listing(&st, spec, p.page).await
+    listing(&st, viewer, spec, p.page).await
 }
 
-async fn top(State(st): State<AppState>, Query(p): Query<PageParams>) -> Page {
+async fn top(State(st): State<AppState>, viewer: Viewer, Query(p): Query<PageParams>) -> Page {
     let (label, span, key) = match p.t.as_deref() {
         Some("day") => ("day", 86_400, "day"),
         Some("month") => ("month", 86_400 * 30, "month"),
@@ -327,11 +364,12 @@ async fn top(State(st): State<AppState>, Query(p): Query<PageParams>) -> Page {
         extra: &extra,
         ..Spec::new(Listing::Top { since }, "/top")
     };
-    listing(&st, spec, p.page).await
+    listing(&st, viewer, spec, p.page).await
 }
 
 async fn by_tag(
     State(st): State<AppState>,
+    viewer: Viewer,
     Path(tag): Path<String>,
     Query(p): Query<PageParams>,
 ) -> Page {
@@ -347,11 +385,12 @@ async fn by_tag(
         },
         ..Spec::new(Listing::Front, &base)
     };
-    listing(&st, spec, p.page).await
+    listing(&st, viewer, spec, p.page).await
 }
 
 async fn by_domain(
     State(st): State<AppState>,
+    viewer: Viewer,
     Path(domain): Path<String>,
     Query(p): Query<PageParams>,
 ) -> Page {
@@ -372,15 +411,16 @@ async fn by_domain(
         },
         ..Spec::new(Listing::New, &base)
     };
-    listing(&st, spec, p.page).await
+    listing(&st, viewer, spec, p.page).await
 }
 
-async fn story(State(st): State<AppState>, Path(short_id): Path<String>) -> Page {
+async fn story(State(st): State<AppState>, viewer: Viewer, Path(short_id): Path<String>) -> Page {
     let row = st.store.story(&short_id).await?.ok_or(AppError::NotFound)?;
     let now = (st.clock)();
     Ok(Html(
         StoryPage {
             site: SITE_NAME,
+            viewer,
             nav: "",
             s: StoryView::from_row(row, now),
         }
@@ -393,7 +433,11 @@ struct SearchParams {
     q: Option<String>,
 }
 
-async fn search_page(State(st): State<AppState>, Query(p): Query<SearchParams>) -> Page {
+async fn search_page(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    Query(p): Query<SearchParams>,
+) -> Page {
     let q = p.q.unwrap_or_default();
     let parsed = search::parse(&q);
     let now = (st.clock)();
@@ -407,6 +451,7 @@ async fn search_page(State(st): State<AppState>, Query(p): Query<SearchParams>) 
     Ok(Html(
         SearchPage {
             site: SITE_NAME,
+            viewer,
             nav: "search",
             searched: !parsed.is_empty(),
             q,
@@ -416,10 +461,11 @@ async fn search_page(State(st): State<AppState>, Query(p): Query<SearchParams>) 
     ))
 }
 
-async fn tags(State(st): State<AppState>) -> Page {
+async fn tags(State(st): State<AppState>, viewer: Viewer) -> Page {
     Ok(Html(
         TagsPage {
             site: SITE_NAME,
+            viewer,
             nav: "tags",
             tags: st.store.tags().await?,
         }
@@ -432,7 +478,11 @@ struct BlogParams {
     page: Option<usize>,
 }
 
-async fn blog_index(State(st): State<AppState>, Query(p): Query<BlogParams>) -> Page {
+async fn blog_index(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    Query(p): Query<BlogParams>,
+) -> Page {
     let page = p.page.unwrap_or(1).max(1);
     let all = st.blog.posts();
     let start = (page - 1).saturating_mul(BLOG_PAGE_SIZE);
@@ -449,6 +499,7 @@ async fn blog_index(State(st): State<AppState>, Query(p): Query<BlogParams>) -> 
     Ok(Html(
         BlogIndexPage {
             site: SITE_NAME,
+            viewer,
             nav: "blog",
             posts,
             page,
@@ -459,16 +510,24 @@ async fn blog_index(State(st): State<AppState>, Query(p): Query<BlogParams>) -> 
     ))
 }
 
-async fn blog_post(State(st): State<AppState>, Path(slug): Path<String>) -> Page {
+async fn blog_post(State(st): State<AppState>, viewer: Viewer, Path(slug): Path<String>) -> Page {
     let post = st.blog.post(&slug).ok_or(AppError::NotFound)?;
     Ok(Html(
         BlogPostPage {
             site: SITE_NAME,
+            viewer,
             nav: "blog",
             post,
         }
         .render()?,
     ))
+}
+
+async fn login_js() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        include_str!("../static/login.js"),
+    )
 }
 
 async fn css() -> impl IntoResponse {

@@ -16,7 +16,7 @@ records in the author's own repo.
 
 M0 is built: the schema, ranking, levels, search, link canonicalization,
 read-only listings, the blog, the lexicon drafts, and an accessibility audit
-that every page passes. Sign-in and writing are M1 and M2. The milestone table is in the
+that every page passes. M1, sign-in, is built. Writing is M2. The milestone table is in the
 design doc, section 16.
 
 ## Quick start
@@ -41,7 +41,20 @@ needs `pre-commit`.
 | `THREADED_DB` | `sqlite:threaded.db` |
 | `THREADED_ADDR` | `127.0.0.1:8080` |
 | `THREADED_BLOG_DIR` | `blog` |
+| `THREADED_PUBLIC_URL` | unset: the localhost development OAuth client |
+| `THREADED_OAUTH_KEY` | required with `THREADED_PUBLIC_URL` |
+| `THREADED_COOKIE_KEY` | required with `THREADED_PUBLIC_URL`; unset in development means sessions end on restart |
 | `RUST_LOG` | `info` |
+
+## Signing in locally
+
+```sh
+make run
+```
+
+Open `http://127.0.0.1:8080`, not `localhost`: atproto's development client
+returns to `127.0.0.1`. Sign in with any atproto account. Threaded asks for the
+`atproto` scope only. `threaded keygen DIR` writes the production key files.
 
 ## Blog
 
@@ -75,13 +88,16 @@ section 12. A file that fails to parse is skipped and the reason is logged.
 | `/tags` | Tag list |
 | `/blog` | Blog index, newest first; `?page=2` and on |
 | `/blog/{slug}` | A blog post |
+| `/login` | Sign in with an atproto account |
+| `/oauth-client-metadata.json`, `/oauth/jwks.json` | OAuth client metadata and public key |
 | `/healthz` | Liveness |
 
 ## Layout
 
 ```text
-src/main.rs        CLI: serve, seed
+src/main.rs        CLI: serve, seed, keygen
 crates/core/       ranking, levels, search parser, links, tags
+crates/auth/       atproto OAuth: keys, SQLite session store, sign-in flow
 crates/store/      SQLite via sqlx; migrations/ at the repo root
 crates/web/        axum router, askama templates, CSS
 migrations/        forward-only SQL migrations
@@ -90,6 +106,7 @@ scripts/a11y/      axe-core page audit
 blog/              blog posts, served from ./blog
 deploy/            systemd units, nginx config, backup and update scripts
 docs/              design doc, deploy doc, and deck
+third_party/       jacquard crates patched onto fixed crypto; see its README
 ```
 
 ## License

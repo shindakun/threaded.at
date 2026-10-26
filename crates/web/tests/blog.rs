@@ -1,3 +1,5 @@
+mod common;
+
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,6 +15,7 @@ use tower::ServiceExt;
 async fn app(dir: &Path) -> axum::Router {
     let store = Store::open("sqlite::memory:").await.unwrap();
     router(AppState {
+        auth: common::auth(&store),
         store,
         blog: Arc::new(Blog::new(dir, Duration::ZERO)),
         clock: Arc::new(|| 1_790_000_000),

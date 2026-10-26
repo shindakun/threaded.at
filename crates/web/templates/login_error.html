@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Sign-in did not finish | {{ site }}{% endblock %}
+{% block main %}
+<h1>Sign-in did not finish</h1>
+<p class="lead">{{ reason }}</p>
+{% if let Some(h) = host %}<p class="hint">Server: {{ h }}</p>{% endif %}
+<p><a href="/login">Try again</a></p>
+{% endblock %}

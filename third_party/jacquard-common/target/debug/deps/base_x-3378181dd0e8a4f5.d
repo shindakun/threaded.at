@@ -1,0 +1,11 @@
+/Users/steve/Code/linksite.at/third_party/jacquard-common/target/debug/deps/base_x-3378181dd0e8a4f5.d: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/alphabet.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/bigint.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/decoder.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/encoder.rs
+
+/Users/steve/Code/linksite.at/third_party/jacquard-common/target/debug/deps/libbase_x-3378181dd0e8a4f5.rlib: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/alphabet.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/bigint.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/decoder.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/encoder.rs
+
+/Users/steve/Code/linksite.at/third_party/jacquard-common/target/debug/deps/libbase_x-3378181dd0e8a4f5.rmeta: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/alphabet.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/bigint.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/decoder.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/encoder.rs
+
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/lib.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/alphabet.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/bigint.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/decoder.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/encoder.rs:

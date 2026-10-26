@@ -56,4 +56,4 @@ done
 story=$(curl -fs "$base/newest" | grep -o 'href="/s/[a-z0-9]*"' | head -1 | cut -d'"' -f2)
 
 (cd "$here" && npm ci --silent --no-audit --no-fund)
-node "$here/audit.mjs" "$base" / /newest /active /top /t/rust /domain/example.com /tags /search "/search?q=rust" "$story" /s/nope00 /blog /blog/sample
+node "$here/audit.mjs" "$base" / /newest /active /top /t/rust /domain/example.com /tags /search "/search?q=rust" "$story" /s/nope00 /blog /blog/sample /login "/oauth/callback?error=access_denied"

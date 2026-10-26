@@ -4,15 +4,20 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use threaded_core::link;
 use threaded_store::{NewStory, Store};
 
-const USAGE: &str = "usage: threaded [serve | seed]
+const USAGE: &str = "usage: threaded [serve | seed | keygen DIR]
 
-  serve   run the web server (default)
-  seed    load demo tags and stories into the database
+  serve       run the web server (default)
+  seed        load demo tags and stories into the database
+  keygen DIR  write a new OAuth signing key and cookie key into DIR
 
 environment:
-  THREADED_DB        database URL (default sqlite:threaded.db)
-  THREADED_ADDR      listen address (default 127.0.0.1:8080)
-  THREADED_BLOG_DIR  blog posts directory (default blog)";
+  THREADED_DB          database URL (default sqlite:threaded.db)
+  THREADED_ADDR        listen address (default 127.0.0.1:8080)
+  THREADED_BLOG_DIR    blog posts directory (default blog)
+  THREADED_PUBLIC_URL  public origin, e.g. https://threaded.at; unset runs
+                       the localhost development OAuth client
+  THREADED_OAUTH_KEY   OAuth signing key file; required with THREADED_PUBLIC_URL
+  THREADED_COOKIE_KEY  cookie key file; required with THREADED_PUBLIC_URL";
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -28,6 +33,13 @@ async fn main() -> ExitCode {
     let result = match cmd.as_deref() {
         None | Some("serve") => serve(&db).await,
         Some("seed") => seed(&db).await,
+        Some("keygen") => match std::env::args().nth(2) {
+            Some(dir) => keygen(&dir),
+            None => {
+                eprintln!("{USAGE}");
+                return ExitCode::from(2);
+            }
+        },
         _ => {
             eprintln!("{USAGE}");
             return ExitCode::from(2);
@@ -44,19 +56,103 @@ async fn main() -> ExitCode {
 
 type BoxError = Box<dyn std::error::Error>;
 
+fn keygen(dir: &str) -> Result<(), BoxError> {
+    threaded_auth::keys::generate(std::path::Path::new(dir))?;
+    println!(
+        "wrote {dir}/{} and {dir}/{}",
+        threaded_auth::keys::OAUTH_KEY_FILE,
+        threaded_auth::keys::COOKIE_KEY_FILE
+    );
+    Ok(())
+}
+
+fn env(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|v| !v.is_empty())
+}
+
+fn auth(store: &Store, addr: &str) -> Result<threaded_web::auth::Auth, BoxError> {
+    use threaded_auth::client::{build, Mode};
+    use threaded_auth::keys;
+
+    let auth_store = threaded_auth::store::SqliteAuthStore::new(store.pool().clone());
+    match env("THREADED_PUBLIC_URL") {
+        Some(public_url) => {
+            let key_path = env("THREADED_OAUTH_KEY").ok_or(
+                "THREADED_PUBLIC_URL is set, so THREADED_OAUTH_KEY must name the OAuth key file",
+            )?;
+            let cookie_path = env("THREADED_COOKIE_KEY").ok_or(
+                "THREADED_PUBLIC_URL is set, so THREADED_COOKIE_KEY must name the cookie key file",
+            )?;
+            let keyset = keys::load_keyset(std::path::Path::new(&key_path))?;
+            let cookie_key = keys::load_cookie_key(std::path::Path::new(&cookie_path))?;
+            let client = build(
+                Mode::Hosted {
+                    public_url: public_url.clone(),
+                    keyset,
+                },
+                auth_store.clone(),
+            )?;
+            tracing::info!("OAuth client {public_url}/oauth-client-metadata.json");
+            Ok(threaded_web::auth::Auth::new(
+                client,
+                auth_store,
+                &cookie_key,
+                true,
+            ))
+        }
+        None => {
+            let port = addr.rsplit(':').next().unwrap_or("8080");
+            let callback = format!("http://127.0.0.1:{port}/oauth/callback");
+            let client = build(Mode::Localhost { callback }, auth_store.clone())?;
+            let cookie_key = match env("THREADED_COOKIE_KEY") {
+                Some(p) => keys::load_cookie_key(std::path::Path::new(&p))?,
+                None => {
+                    tracing::warn!(
+                        "THREADED_COOKIE_KEY unset: sessions end when the server restarts"
+                    );
+                    keys::random_cookie_key()
+                }
+            };
+            tracing::info!("OAuth localhost development client; open http://127.0.0.1:{port}");
+            Ok(threaded_web::auth::Auth::new(
+                client,
+                auth_store,
+                &cookie_key,
+                false,
+            ))
+        }
+    }
+}
+
 async fn serve(db: &str) -> Result<(), BoxError> {
     let addr = std::env::var("THREADED_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".into());
     let store = Store::open(db).await?;
     let blog_dir = std::env::var("THREADED_BLOG_DIR").unwrap_or_else(|_| "blog".into());
     let blog = threaded_web::blog::Blog::new(blog_dir, std::time::Duration::from_secs(1));
-    let app = threaded_web::router(threaded_web::AppState::new(store, blog));
+    let auth = auth(&store, &addr)?;
+
+    let pruner = auth.store.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            tick.tick().await;
+            if let Err(e) = pruner.prune().await {
+                tracing::warn!(error = %e, "pruning expired sign-in requests");
+            }
+        }
+    });
+
+    let app = threaded_web::router(threaded_web::AppState::new(store, blog, auth));
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!("listening on http://{addr}");
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(async {
+        let _ = tokio::signal::ctrl_c().await;
+    })
+    .await?;
     Ok(())
 }
 

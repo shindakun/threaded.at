@@ -1,0 +1,12 @@
+/Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/deps/hmac-9fb5b906388d780d.d: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/block_api.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/simple.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/simple_reset.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/utils.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/../README.md
+
+/Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/deps/libhmac-9fb5b906388d780d.rlib: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/block_api.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/simple.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/simple_reset.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/utils.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/../README.md
+
+/Users/steve/Code/linksite.at/third_party/jacquard-oauth/target/debug/deps/libhmac-9fb5b906388d780d.rmeta: /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/lib.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/block_api.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/simple.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/simple_reset.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/utils.rs /Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/../README.md
+
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/lib.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/block_api.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/simple.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/simple_reset.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/utils.rs:
+/Users/steve/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.13.0/src/../README.md:

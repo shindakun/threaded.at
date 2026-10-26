@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Sign in | {{ site }}{% endblock %}
+{% block main %}
+<h1>Sign in</h1>
+{% if let Some(e) = error %}<p class="form-error" id="login-error" role="alert">{{ e }}</p>{% endif %}
+<form class="login" method="post" action="/login">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <input type="hidden" name="next" value="{{ next }}">
+  <label for="identifier">Handle or server</label>
+  <div class="combo" data-typeahead>
+    <input id="identifier" name="identifier" type="text" value="{{ identifier }}" autocomplete="username" autocapitalize="none" spellcheck="false" required aria-describedby="identifier-hint{% if error.is_some() %} login-error{% endif %}">
+  </div>
+  <p class="hint" id="identifier-hint">You sign in on the server that hosts your account, not on Threaded. Threaded never sees your password.</p>
+  <button type="submit" class="primary">Continue</button>
+</form>
+<form class="signup" method="post" action="/login">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <input type="hidden" name="next" value="{{ next }}">
+  <input type="hidden" name="identifier" value="https://bsky.social">
+  <button type="submit" class="secondary">Create an account on Bluesky</button>
+</form>
+<script src="/static/login.js" defer></script>
+{% endblock %}

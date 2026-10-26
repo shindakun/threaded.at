@@ -76,11 +76,26 @@ sudo install -d -m 0755 /etc/threaded
 sudo install -o root -g threaded -m 0640 deploy/threaded.env /etc/threaded/threaded.env
 ```
 
+Generate the OAuth signing key and the cookie key once. `keygen` refuses to
+overwrite existing keys.
+
+```sh
+sudo /opt/threaded/bin/threaded keygen /etc/threaded
+sudo chown root:threaded /etc/threaded/oauth-key.json /etc/threaded/cookie.key
+sudo chmod 0640 /etc/threaded/oauth-key.json /etc/threaded/cookie.key
+```
+
 | Variable | Value |
 |---|---|
 | `THREADED_DB` | `sqlite:/var/lib/threaded/threaded.db` |
 | `THREADED_ADDR` | `127.0.0.1:8787`; nginx's `proxy_pass` must match |
+| `THREADED_PUBLIC_URL` | `https://threaded.at`; the OAuth client ID is `https://threaded.at/oauth-client-metadata.json` |
+| `THREADED_OAUTH_KEY` | `/etc/threaded/oauth-key.json` |
+| `THREADED_COOKIE_KEY` | `/etc/threaded/cookie.key` |
 | `RUST_LOG` | `info` |
+
+Back up both key files. Losing the OAuth key ends every session; losing the
+cookie key signs everyone out.
 
 `THREADED_BLOG_DIR` is not set, so the blog folder is `./blog` in the
 checkout.
@@ -176,7 +191,6 @@ takes is the way back from a bad release.
 
 | Milestone | Adds to the droplet |
 |---|---|
-| M1 Sign-in | The OAuth client signing key in `/etc/threaded/`, mode 0640, group `threaded`; `https://threaded.at/oauth-client-metadata.json` must be reachable |
 | M3 Moderation | The Anthropic API key in `threaded.env` |
 | M4 Indexer | hydrant as a second systemd service on a Unix socket in `/run/hydrant/`, with its database in `/var/lib/hydrant` |
 | Lexicons | A `_lexicon.threaded.at` TXT record naming the publishing DID |
