@@ -1142,3 +1142,194 @@ impl Store {
         }
     }
 }
+
+/// A tag's fields as an admin edits them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TagFields<'a> {
+    pub description: &'a str,
+    pub category: &'a str,
+    pub rank_boost: f64,
+    pub privileged: bool,
+    pub new_users_ok: bool,
+    pub is_media: bool,
+    pub active: bool,
+}
+
+impl Store {
+    /// Stored settings as key and value.
+    pub async fn settings(&self) -> Result<Vec<(String, String)>> {
+        sqlx::query_as("SELECT key, value FROM settings ORDER BY key")
+            .fetch_all(self.pool())
+            .await
+    }
+
+    /// Saves changed settings, each logged with its old and new value.
+    pub async fn save_settings(
+        &self,
+        changes: &[(&str, String, String)],
+        by: By,
+        reason: &str,
+        now: i64,
+    ) -> Result<Outcome> {
+        if let Err(e) = reason_ok(reason) {
+            return Ok(Err(e));
+        }
+        let mut tx = self.pool().begin().await?;
+        for (key, old, new) in changes {
+            sqlx::query(
+                "INSERT INTO settings (key, value, updated_by, updated_at) VALUES (?, ?, ?, ?) \
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, \
+                 updated_by = excluded.updated_by, updated_at = excluded.updated_at",
+            )
+            .bind(key)
+            .bind(new)
+            .bind(by.user_id())
+            .bind(now)
+            .execute(&mut *tx)
+            .await?;
+            let detail = format!("{key}: {old} to {new}");
+            log(
+                &mut tx,
+                by,
+                &LogEntry {
+                    action: "change setting",
+                    reason: reason.trim(),
+                    detail: &detail,
+                    ..Default::default()
+                },
+                now,
+            )
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(Ok(()))
+    }
+
+    /// Creates a tag or changes one, logging what changed.
+    pub async fn save_tag(
+        &self,
+        name: &str,
+        f: &TagFields<'_>,
+        by: By,
+        reason: &str,
+        now: i64,
+    ) -> Result<Outcome> {
+        if let Err(e) = reason_ok(reason) {
+            return Ok(Err(e));
+        }
+        if !threaded_core::tag::valid_name(name) {
+            return Ok(Err(ModError::Refused(
+                "A tag name is lowercase letters, digits, and - _ +, up to 25 characters.",
+            )));
+        }
+        if !(-10.0..=10.0).contains(&f.rank_boost) {
+            return Ok(Err(ModError::Refused("A rank boost is from -10 to 10.")));
+        }
+        let mut tx = self.pool().begin().await?;
+        let old: Option<crate::TagRow> = sqlx::query_as(
+            "SELECT id, name, description, category, rank_boost, privileged, new_users_ok, is_media, active \
+             FROM tags WHERE name = ?",
+        )
+        .bind(name)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let id: i64 = sqlx::query_scalar(
+            "INSERT INTO tags (name, description, category, rank_boost, privileged, new_users_ok, is_media, active) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?) \
+             ON CONFLICT(name) DO UPDATE SET description = excluded.description, category = excluded.category, \
+             rank_boost = excluded.rank_boost, privileged = excluded.privileged, \
+             new_users_ok = excluded.new_users_ok, is_media = excluded.is_media, active = excluded.active \
+             RETURNING id",
+        )
+        .bind(name)
+        .bind(f.description.trim())
+        .bind(f.category.trim())
+        .bind(f.rank_boost)
+        .bind(f.privileged)
+        .bind(f.new_users_ok)
+        .bind(f.is_media)
+        .bind(f.active)
+        .fetch_one(&mut *tx)
+        .await?;
+        let (action, detail) = match old {
+            None => ("create tag", String::new()),
+            Some(t) => {
+                let (d, c, b) = (t.description, t.category, t.rank_boost);
+                let (p, n, m, a) = (t.privileged, t.new_users_ok, t.is_media, t.active);
+                let mut ch = Vec::new();
+                if d != f.description.trim() {
+                    ch.push("description".to_string());
+                }
+                if c != f.category.trim() {
+                    ch.push(format!("category: {c} to {}", f.category.trim()));
+                }
+                if b != f.rank_boost {
+                    ch.push(format!("rank boost: {b} to {}", f.rank_boost));
+                }
+                for (label, was, now) in [
+                    ("privileged", p, f.privileged),
+                    ("new users", n, f.new_users_ok),
+                    ("media", m, f.is_media),
+                    ("active", a, f.active),
+                ] {
+                    if was != now {
+                        ch.push(format!("{label}: {was} to {now}"));
+                    }
+                }
+                if ch.is_empty() {
+                    return Ok(Err(ModError::Refused("Nothing changed.")));
+                }
+                ("edit tag", ch.join("; "))
+            }
+        };
+        log(
+            &mut tx,
+            by,
+            &LogEntry {
+                action,
+                tag_id: Some(id),
+                reason: reason.trim(),
+                detail: &detail,
+                ..Default::default()
+            },
+            now,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(Ok(()))
+    }
+
+    /// Moderators and admins, by role then handle.
+    pub async fn staff_members(&self) -> Result<Vec<crate::UserRow>> {
+        sqlx::query_as(
+            "SELECT id, did, handle, handle_verified, role, karma, public_votes, vouched_by, created_at, \
+             banned_at, banned_reason FROM users WHERE role <> 'user' ORDER BY role, handle",
+        )
+        .fetch_all(self.pool())
+        .await
+    }
+
+    /// Every active role badge with its holder's handle.
+    pub async fn badges_in_use(&self) -> Result<Vec<(String, Badge)>> {
+        let rows: Vec<(String, i64, i64, String, Option<String>)> = sqlx::query_as(
+            "SELECT u.handle, b.id, b.user_id, b.label, b.link FROM role_badges b \
+             JOIN users u ON u.id = b.user_id WHERE b.removed_at IS NULL ORDER BY b.label, u.handle",
+        )
+        .fetch_all(self.pool())
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(h, id, user_id, label, link)| {
+                (
+                    h,
+                    Badge {
+                        id,
+                        user_id,
+                        label,
+                        link,
+                    },
+                )
+            })
+            .collect())
+    }
+}

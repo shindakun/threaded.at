@@ -63,7 +63,7 @@ pub(crate) async fn staff(
     Ok(Staff { user })
 }
 
-fn outcome(r: Result<(), ModError>, back: &str) -> Result<Response, AppError> {
+pub(crate) fn outcome(r: Result<(), ModError>, back: &str) -> Result<Response, AppError> {
     match r {
         Ok(()) => Ok(Redirect::to(&format!("{back}?done=1")).into_response()),
         Err(ModError::NotFound) => Err(AppError::NotFound),
@@ -74,7 +74,7 @@ fn outcome(r: Result<(), ModError>, back: &str) -> Result<Response, AppError> {
 #[derive(Deserialize, Default)]
 pub struct DoneQuery {
     #[serde(default)]
-    done: Option<String>,
+    pub done: Option<String>,
     #[serde(default)]
     tab: Option<String>,
     #[serde(default)]
@@ -783,28 +783,6 @@ pub async fn moderations(
             rows: rows.into_iter().map(|r| log_view(r, now)).collect(),
             page,
             more,
-        }
-        .render()?,
-    ))
-}
-
-// ---------- admin ----------
-
-#[derive(Template)]
-#[template(path = "admin.html")]
-struct AdminPage {
-    site: &'static str,
-    viewer: Viewer,
-    nav: &'static str,
-}
-
-pub async fn admin_home(State(st): State<AppState>, viewer: Viewer) -> Page {
-    staff(&st, &viewer, Need::Admin, "/admin").await?;
-    Ok(Html(
-        AdminPage {
-            site: SITE_NAME,
-            viewer,
-            nav: "admin",
         }
         .render()?,
     ))

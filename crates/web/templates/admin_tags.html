@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Tags | Admin | {{ site }}{% endblock %}
+{% block main %}
+<h1>Tags</h1>
+<nav class="tabs" aria-label="Admin">
+  <a href="/admin">Health</a>
+  <a href="/admin/tags" aria-current="page">Tags</a>
+  <a href="/admin/people">People</a>
+  <a href="/admin/settings">Settings</a>
+</nav>
+{% if done %}<p class="notice" role="status">Saved. The change is in the moderation log.</p>{% endif %}
+<ul class="plain">
+{% for t in tags %}
+<li>
+  <details>
+    <summary><span class="tag">{{ t.name }}</span> {{ t.description }}{% if !t.active %} (inactive){% endif %}</summary>
+    {% call tag_form(t.name, t.name, t.description, t.category, t.rank_boost, t.privileged, t.new_users_ok, t.is_media, t.active, false) %}{% endcall %}
+  </details>
+</li>
+{% endfor %}
+</ul>
+<h2>New tag</h2>
+{% call tag_form("new", "", "", "", 0.0, false, true, false, true, true) %}{% endcall %}
+{% endblock %}
+
+{% macro tag_form(id, name, description, category, boost, privileged, new_users_ok, is_media, active, new) %}
+<form method="post" action="/admin/tags" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  {% if new %}
+  <label for="t-{{ id }}-name">Name</label>
+  <input id="t-{{ id }}-name" name="name" type="text" maxlength="25" required>
+  {% else %}
+  <input type="hidden" name="name" value="{{ name }}">
+  {% endif %}
+  <label for="t-{{ id }}-description">Description</label>
+  <input id="t-{{ id }}-description" name="description" type="text" value="{{ description }}">
+  <label for="t-{{ id }}-category">Category</label>
+  <input id="t-{{ id }}-category" name="category" type="text" value="{{ category }}">
+  <label for="t-{{ id }}-boost">Rank boost, -10 to 10</label>
+  <input id="t-{{ id }}-boost" name="rank_boost" type="text" value="{{ boost }}">
+  <label class="check-line"><input type="checkbox" name="privileged" value="1"{% if privileged %} checked{% endif %}> Moderators only</label>
+  <label class="check-line"><input type="checkbox" name="new_users_ok" value="1"{% if new_users_ok %} checked{% endif %}> New accounts may use it</label>
+  <label class="check-line"><input type="checkbox" name="is_media" value="1"{% if is_media %} checked{% endif %}> Media</label>
+  <label class="check-line"><input type="checkbox" name="active" value="1"{% if active %} checked{% endif %}> Active</label>
+  <label for="t-{{ id }}-reason">Reason</label>
+  <input id="t-{{ id }}-reason" name="reason" type="text" required>
+  <button type="submit" class="secondary">{% if new %}Create tag{% else %}Save {{ name }}{% endif %}</button>
+</form>
+{% endmacro %}

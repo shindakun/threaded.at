@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}People | Admin | {{ site }}{% endblock %}
+{% block main %}
+<h1>People</h1>
+<nav class="tabs" aria-label="Admin">
+  <a href="/admin">Health</a>
+  <a href="/admin/tags">Tags</a>
+  <a href="/admin/people" aria-current="page">People</a>
+  <a href="/admin/settings">Settings</a>
+</nav>
+{% if done %}<p class="notice" role="status">Saved. The change is in the moderation log.</p>{% endif %}
+<h2>Moderators and admins</h2>
+<ul class="plain">
+{% for p in people %}
+<li>
+  <a href="/mod/u/{{ p.handle }}">{{ p.handle }}</a>, {{ p.role }} <code>{{ p.did }}</code>
+  {% if !p.is_me %}
+  <form method="post" action="/admin/people" class="inline-form">
+    <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+    <input type="hidden" name="did" value="{{ p.did }}">
+    <input type="hidden" name="role" value="user">
+    <label for="revoke-{{ loop.index }}">Reason</label>
+    <input id="revoke-{{ loop.index }}" name="reason" type="text" required>
+    <button type="submit" class="secondary">Revoke {{ p.handle }}</button>
+  </form>
+  {% endif %}
+</li>
+{% endfor %}
+</ul>
+<h2>Grant a role</h2>
+<form method="post" action="/admin/people" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <label for="grant-did">DID</label>
+  <input id="grant-did" name="did" type="text" required aria-describedby="grant-hint">
+  <p class="hint" id="grant-hint">A DID, such as did:plc:..., not a handle. The account must have signed in once.</p>
+  <fieldset>
+    <legend>Role</legend>
+    <label class="check-line"><input type="radio" name="role" value="moderator" required> Moderator</label>
+    <label class="check-line"><input type="radio" name="role" value="admin"> Admin</label>
+  </fieldset>
+  <label for="grant-reason">Reason</label>
+  <input id="grant-reason" name="reason" type="text" required>
+  <button type="submit" class="secondary">Grant</button>
+</form>
+<h2>Role badges in use</h2>
+{% if badges.is_empty() %}<p class="empty">No badges.</p>{% else %}
+<ul class="plain">{% for b in badges %}<li><span class="badge">{{ b.1.label }}</span> <a href="/mod/u/{{ b.0 }}">{{ b.0 }}</a></li>{% endfor %}</ul>
+{% endif %}
+{% endblock %}

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+pub mod admin;
 pub mod auth;
 pub mod blog;
 pub mod markdown;
@@ -62,6 +63,12 @@ impl AppState {
         self.policy.read().map(|p| p.clone()).unwrap_or_default()
     }
 
+    pub fn set_policy(&self, p: threaded_core::policy::Policy) {
+        if let Ok(mut w) = self.policy.write() {
+            *w = p;
+        }
+    }
+
     pub fn triage_on(&self) -> bool {
         self.triage
     }
@@ -96,7 +103,16 @@ pub fn router(state: AppState) -> Router {
             get(staff::mod_user).post(staff::mod_user_action),
         )
         .route("/moderations", get(staff::moderations))
-        .route("/admin", get(staff::admin_home))
+        .route("/admin", get(admin::home))
+        .route(
+            "/admin/settings",
+            get(admin::settings_page).post(admin::settings_save),
+        )
+        .route("/admin/tags", get(admin::tags_page).post(admin::tags_save))
+        .route(
+            "/admin/people",
+            get(admin::people_page).post(admin::people_save),
+        )
         .route(
             "/s/{short_id}/edit",
             get(write::story_edit_page).post(write::story_edit),

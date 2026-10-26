@@ -69,4 +69,4 @@ curl -fs -H "Cookie: $cookie" "$base/settings" | grep -q 'href="/u/a11y.example"
 curl -fs -H "Cookie: $cookie" "$base/admin" >/dev/null || { echo "fixture user cannot open /admin"; exit 1; }
 curl -fs -H "Cookie: $cookie" "$base/mod" | grep -q 'class="queue-row"' || { echo "the moderation queue is empty or closed"; exit 1; }
 A11Y_COOKIE="$cookie" node "$here/audit.mjs" "$base" / "$mine" "$mine/edit" /submit "/c/$comment/reply" "/c/$comment/edit" /settings /u/a11y.example /u/other.example \
-  /mod "/mod/s/$sid" /mod/c/"$comment" /mod/u/other.example /moderations /admin
+  /mod "/mod/s/$sid" /mod/c/"$comment" /mod/u/other.example /moderations /admin /admin/settings /admin/tags /admin/people

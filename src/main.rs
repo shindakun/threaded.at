@@ -161,7 +161,13 @@ async fn serve(db: &str) -> Result<(), BoxError> {
         }
     });
 
-    let app = threaded_web::router(threaded_web::AppState::new(store, blog, auth));
+    let stored = store.settings().await?;
+    let policy = threaded_core::policy::Policy::from_settings(
+        stored.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+    );
+    let state = threaded_web::AppState::new(store, blog, auth);
+    state.set_policy(policy);
+    let app = threaded_web::router(state);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!("listening on http://{addr}");
     axum::serve(

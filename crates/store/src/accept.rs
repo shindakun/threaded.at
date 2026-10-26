@@ -82,9 +82,9 @@ pub enum Refusal {
     CannotSubmit,
     #[error("Your account cannot comment.")]
     CannotComment,
-    #[error("You can submit {0} stories a day. Try again tomorrow.")]
+    #[error("You can submit {} a day. Try again tomorrow.", count(*.0, "story", "stories"))]
     StoryLimit(i64),
-    #[error("You can post {0} comments an hour. Try again later.")]
+    #[error("You can post {} an hour. Try again later.", count(*.0, "comment", "comments"))]
     CommentLimit(i64),
     #[error("A title is 1 to {TITLE_MAX} characters.")]
     Title,
@@ -117,6 +117,10 @@ pub enum Refusal {
     Locked,
     #[error("That comment cannot take replies.")]
     ParentClosed,
+}
+
+fn count(n: i64, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
 }
 
 fn text_too_long(text: &str) -> bool {

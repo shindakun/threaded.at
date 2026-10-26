@@ -45,6 +45,7 @@ pub struct TagRow {
     pub id: i64,
     pub name: String,
     pub description: String,
+    pub category: String,
     pub rank_boost: f64,
     pub privileged: bool,
     pub new_users_ok: bool,
@@ -225,7 +226,7 @@ impl Store {
     }
 
     pub async fn all_tags(&self) -> Result<Vec<TagRow>> {
-        sqlx::query_as("SELECT id, name, description, rank_boost, privileged, new_users_ok, is_media, active FROM tags ORDER BY name")
+        sqlx::query_as("SELECT id, name, description, category, rank_boost, privileged, new_users_ok, is_media, active FROM tags ORDER BY name")
             .fetch_all(&self.pool)
             .await
     }

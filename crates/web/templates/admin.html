@@ -2,5 +2,14 @@
 {% block title %}Admin | {{ site }}{% endblock %}
 {% block main %}
 <h1>Admin</h1>
-<p><a href="/mod">Moderation</a></p>
+<nav class="tabs" aria-label="Admin">
+  <a href="/admin" aria-current="page">Health</a>
+  <a href="/admin/tags">Tags</a>
+  <a href="/admin/people">People</a>
+  <a href="/admin/settings">Settings</a>
+</nav>
+<dl class="facts">
+  <dt>AI triage</dt><dd>{{ triage }}</dd>
+  <dt>Flagged items</dt><dd><a href="/mod?tab=flagged">{{ flagged }}</a></dd>
+</dl>
 {% endblock %}

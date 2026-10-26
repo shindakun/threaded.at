@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Settings | Admin | {{ site }}{% endblock %}
+{% block main %}
+<h1>Settings</h1>
+<nav class="tabs" aria-label="Admin">
+  <a href="/admin">Health</a>
+  <a href="/admin/tags">Tags</a>
+  <a href="/admin/people">People</a>
+  <a href="/admin/settings" aria-current="page">Settings</a>
+</nav>
+{% if done %}<p class="notice" role="status">Saved. Each change is in the moderation log.</p>{% endif %}
+<form method="post" action="/admin/settings" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  {% for r in rows %}
+  <label for="s-{{ r.key }}">{{ r.label }}</label>
+  <input id="s-{{ r.key }}" name="{{ r.key }}" type="text" value="{{ r.value }}" required>
+  {% endfor %}
+  <label for="settings-reason">Reason</label>
+  <input id="settings-reason" name="reason" type="text" required>
+  <button type="submit" class="primary">Save changes</button>
+</form>
+{% endblock %}
