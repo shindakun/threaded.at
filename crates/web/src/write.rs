@@ -13,25 +13,16 @@ use threaded_auth::flow;
 use threaded_auth::records::{
     comment_record, submission_record, vote_record, RecordRef, SessionRef, WriteError,
 };
-use threaded_core::level::{self, Capability, Level, Thresholds};
-use threaded_core::{link, tag};
-use threaded_store::{CommentRow, NewComment, NewStory, StoryRow, Target, UserRow, VoteChange};
+use threaded_core::level::{self, Capability};
+use threaded_core::link;
+use threaded_core::policy::Policy;
+use threaded_store::{
+    is_locked, CommentInput, CommentRow, Context, Refusal, Source, StoryInput, StoryRow, Target,
+    UserRow, VoteChange, TEXT_MAX_BYTES, TEXT_MAX_CHARS, TITLE_MAX,
+};
 
 use crate::auth::{check_csrf, Me, Viewer};
 use crate::{ago, mark_votes, markdown, AppError, AppState, Page, StoryView, SITE_NAME};
-
-const TITLE_MAX: usize = 150;
-/// The lexicons cap text at 5,000 graphemes and 20,000 bytes.
-const TEXT_MAX_CHARS: usize = 5_000;
-const TEXT_MAX_BYTES: usize = 20_000;
-const MAX_TAGS: usize = tag::MAX_PER_STORY;
-const DUPLICATE_DAYS: i64 = 30;
-const LOCK_DAYS: i64 = 90;
-const URL_EDIT_SECS: i64 = 3_600;
-const STORY_FLAG_DAYS: i64 = 14;
-const STORY_FLAG_FLOOR: i64 = -5;
-const COMMENT_FLAG_DAYS: i64 = 7;
-const COMMENT_FLAG_FLOOR: i64 = -10;
 
 pub const STORY_REASONS: &[(&str, &str)] = &[
     ("off-topic", "Off-topic"),
@@ -60,8 +51,8 @@ fn reason_label(code: &str) -> String {
 struct Actor {
     me: Me,
     user: UserRow,
-    level: Level,
     account: level::Account,
+    policy: Policy,
 }
 
 async fn actor(st: &AppState, viewer: &Viewer, next: &str) -> Result<Actor, AppError> {
@@ -75,18 +66,28 @@ async fn actor(st: &AppState, viewer: &Viewer, next: &str) -> Result<Actor, AppE
         .await?
         .ok_or_else(|| AppError::SignIn(next.to_string()))?;
     let account = user.account((st.clock)());
-    let level = level::level(&account, &Thresholds::default());
+    let policy = st.policy();
     Ok(Actor {
         me,
         user,
-        level,
         account,
+        policy,
     })
 }
 
 impl Actor {
     fn can(&self, cap: Capability) -> bool {
-        level::can(&self.account, cap, &Thresholds::default())
+        level::can(&self.account, cap, &self.policy.thresholds)
+    }
+
+    /// The context for `accept` and its checks, for an item from the web form.
+    fn context(&self, st: &AppState) -> Context<'_> {
+        Context {
+            policy: &self.policy,
+            source: Source::Web,
+            triage: st.triage_on(),
+            now: (st.clock)(),
+        }
     }
 }
 
@@ -121,18 +122,12 @@ fn record_ref(uri: &Option<String>, cid: &Option<String>) -> Option<RecordRef> {
 
 fn check_text(text: &str, required: bool) -> Result<(), AppError> {
     if required && text.trim().is_empty() {
-        return Err(AppError::Refused("Write something first.".into()));
+        return Err(AppError::Refused(Refusal::NoText.to_string()));
     }
     if text.chars().count() > TEXT_MAX_CHARS || text.len() > TEXT_MAX_BYTES {
-        return Err(AppError::Refused(format!(
-            "Text is limited to {TEXT_MAX_CHARS} characters."
-        )));
+        return Err(AppError::Refused(Refusal::TooLong.to_string()));
     }
     Ok(())
-}
-
-fn locked(story: &StoryRow, now: i64) -> bool {
-    story.locked || now - story.created_at > LOCK_DAYS * 86_400
 }
 
 // ---------- story page and comment thread ----------
@@ -199,13 +194,14 @@ fn flag_allowed(
     if a.user.id == author_id {
         return false;
     }
+    let p = &a.policy;
     let (cap, days, floor) = if is_story {
-        (Capability::FlagStory, STORY_FLAG_DAYS, STORY_FLAG_FLOOR)
+        (Capability::FlagStory, p.story_flag_days, p.story_flag_floor)
     } else {
         (
             Capability::FlagComment,
-            COMMENT_FLAG_DAYS,
-            COMMENT_FLAG_FLOOR,
+            p.comment_flag_days,
+            p.comment_flag_floor,
         )
     };
     a.can(cap) && now - created_at <= days * 86_400 && score > floor
@@ -302,7 +298,7 @@ pub async fn story_page(
         Some(a) if !a.can(Capability::Comment) => {
             (false, Some("Your account cannot comment.".to_string()))
         }
-        Some(_) if locked(&row, now) => (
+        Some(a) if is_locked(&row, &a.policy, now) => (
             false,
             Some("This story is closed to new comments.".to_string()),
         ),
@@ -516,33 +512,13 @@ pub async fn submit_page(State(st): State<AppState>, viewer: Viewer) -> Page {
     submit_page_html(viewer, SubmitForm::default(), tags, None)
 }
 
-/// Tag names from a form, deduplicated and checked against the tag rules.
+/// Tag names from a form, checked against the tag rules.
 async fn validate_tags(st: &AppState, a: &Actor, names: &[String]) -> Result<Vec<String>, String> {
-    let mut picked: Vec<String> = Vec::new();
-    for n in names {
-        if !picked.contains(n) {
-            picked.push(n.clone());
-        }
+    match st.store.check_tags(&a.user, names, &a.context(st)).await {
+        Ok(Ok(t)) => Ok(t),
+        Ok(Err(r)) => Err(r.to_string()),
+        Err(e) => Err(e.to_string()),
     }
-    if picked.is_empty() {
-        return Err("Pick at least one tag.".into());
-    }
-    if picked.len() > MAX_TAGS {
-        return Err(format!("Pick at most {MAX_TAGS} tags."));
-    }
-    let all = st.store.all_tags().await.map_err(|e| e.to_string())?;
-    for n in &picked {
-        let Some(t) = all.iter().find(|t| &t.name == n && t.active) else {
-            return Err(format!("There is no tag \u{201c}{n}\u{201d}."));
-        };
-        if t.privileged && !a.can(Capability::UsePrivilegedTag) {
-            return Err(format!("Only moderators can use \u{201c}{n}\u{201d}."));
-        }
-        if !t.new_users_ok && !a.can(Capability::UseRestrictedTag) {
-            return Err(format!("New accounts cannot use \u{201c}{n}\u{201d} yet."));
-        }
-    }
-    Ok(picked)
 }
 
 pub async fn submit(
@@ -552,126 +528,64 @@ pub async fn submit(
 ) -> Result<Response, AppError> {
     check_csrf(&viewer, &f.csrf)?;
     let a = actor(&st, &viewer, "/submit").await?;
-    let now = (st.clock)();
-
-    let (per_day, _) = level::limits(a.level);
-    let posted_today = st.store.stories_since(a.user.id, now - 86_400).await?;
-    let problem = (|| {
-        if !a.can(Capability::Submit) {
-            return Some("Your account cannot submit stories.".to_string());
+    let cx = a.context(&st);
+    let input = StoryInput {
+        title: &f.title,
+        url: &f.url,
+        text: &f.text,
+        tags: &f.tags,
+        authored: f.authored.is_some(),
+    };
+    let checked = match st.store.check_story(&a.user, &input, &cx).await? {
+        Ok(c) => c,
+        Err(Refusal::Duplicate(existing)) => {
+            return Ok(Redirect::to(&format!("/s/{existing}?duplicate=1")).into_response())
         }
-        if posted_today >= per_day {
-            return Some(format!(
-                "You can submit {per_day} stories a day. Try again tomorrow."
-            ));
-        }
-        let title = f.title.trim();
-        if title.is_empty() || title.chars().count() > TITLE_MAX {
-            return Some(format!("A title is 1 to {TITLE_MAX} characters."));
-        }
-        if f.url.trim().is_empty() && f.text.trim().is_empty() {
-            return Some("Add a link, some text, or both.".into());
-        }
-        if f.text.chars().count() > TEXT_MAX_CHARS || f.text.len() > TEXT_MAX_BYTES {
-            return Some(format!("Text is limited to {TEXT_MAX_CHARS} characters."));
-        }
-        None
-    })();
-    if let Some(msg) = problem {
-        let tags = tag_choices(&st, &a, &f.tags).await?;
-        return Ok(submit_page_html(viewer, f, tags, Some(msg))?.into_response());
-    }
-
-    let link = if f.url.trim().is_empty() {
-        None
-    } else {
-        match link::parse(&f.url) {
-            Ok(l) => Some(l),
-            Err(e) => {
-                let tags = tag_choices(&st, &a, &f.tags).await?;
-                return Ok(submit_page_html(
-                    viewer,
-                    f,
-                    tags,
-                    Some(format!("The link is not usable: {e}.")),
-                )?
-                .into_response());
-            }
+        Err(r) => {
+            let tags = tag_choices(&st, &a, &f.tags).await?;
+            return Ok(submit_page_html(viewer, f, tags, Some(r.to_string()))?.into_response());
         }
     };
-    if let Some(l) = &link {
-        if let Some(existing) = st
-            .store
-            .duplicate_of(&l.canonical, now - DUPLICATE_DAYS * 86_400)
-            .await?
-        {
-            return Ok(Redirect::to(&format!("/s/{existing}?duplicate=1")).into_response());
-        }
-    }
-    let tags = match validate_tags(&st, &a, &f.tags).await {
-        Ok(t) => t,
-        Err(msg) => {
-            let choices = tag_choices(&st, &a, &f.tags).await?;
-            return Ok(submit_page_html(viewer, f, choices, Some(msg))?.into_response());
-        }
-    };
-    let authored = f.authored.is_some();
-    let rule = if tags.iter().any(|t| t == "show") && !authored {
-        Some("A \u{201c}show\u{201d} story is something you made: tick \u{201c}I wrote or made this\u{201d}.")
-    } else if tags.iter().any(|t| t == "ask") && link.is_some() {
-        Some("An \u{201c}ask\u{201d} story is text only: remove the link.")
-    } else {
-        None
-    };
-    if let Some(msg) = rule {
-        let choices = tag_choices(&st, &a, &f.tags).await?;
-        return Ok(submit_page_html(viewer, f, choices, Some(msg.into()))?.into_response());
-    }
 
     require_scopes(&st, &a.me.session, Flow::Base, "/submit").await?;
-    let tag_refs: Vec<&str> = tags.iter().map(String::as_str).collect();
-    let title = f.title.trim();
-    let text = f.text.trim();
+    let tag_refs: Vec<&str> = checked.tags.iter().map(String::as_str).collect();
     let ns = st.auth.clients.ns;
     let record = submission_record(
         ns,
-        title,
-        link.as_ref().map(|l| l.url.as_str()),
-        text,
+        &checked.title,
+        checked.link.as_ref().map(|l| l.url.as_str()),
+        &checked.text,
         &tag_refs,
-        authored,
-        now,
+        checked.authored,
+        cx.now,
     );
     let written = st
         .writer
         .create(&a.me.session, &ns.submission(), &record)
         .await
         .map_err(|e| write_err(e, "/submit"))?;
-    let inserted = st
+    let accepted = st
         .store
-        .insert_story(&NewStory {
-            user_id: a.user.id,
-            title,
-            link: link.as_ref(),
-            body: text,
-            user_is_author: authored,
-            tags: &tag_refs,
-            created_at: now,
-            record: Some((&written.uri, &written.cid)),
-        })
+        .accept_story(&a.user, &input, (&written.uri, &written.cid), &cx)
         .await;
-    match inserted {
-        Ok(short_id) => Ok(Redirect::to(&format!("/s/{short_id}")).into_response()),
-        Err(e) => {
-            let _ = st
-                .writer
-                .delete(
-                    &a.me.session,
-                    &ns.submission(),
-                    RecordRef::rkey(&written.uri),
-                )
-                .await;
-            Err(e.into())
+    if !matches!(accepted, Ok(Ok(_))) {
+        let _ = st
+            .writer
+            .delete(
+                &a.me.session,
+                &ns.submission(),
+                RecordRef::rkey(&written.uri),
+            )
+            .await;
+    }
+    match accepted? {
+        Ok(acc) => Ok(Redirect::to(&format!("/s/{}", acc.short_id)).into_response()),
+        Err(Refusal::Duplicate(existing)) => {
+            Ok(Redirect::to(&format!("/s/{existing}?duplicate=1")).into_response())
+        }
+        Err(r) => {
+            let tags = tag_choices(&st, &a, &f.tags).await?;
+            Ok(submit_page_html(viewer, f, tags, Some(r.to_string()))?.into_response())
         }
     }
 }
@@ -695,72 +609,57 @@ pub async fn comment(
     check_csrf(&viewer, &f.csrf)?;
     let here = format!("/s/{}", f.story);
     let a = actor(&st, &viewer, &here).await?;
-    let now = (st.clock)();
+    let cx = a.context(&st);
     let story = st.store.story(&f.story).await?.ok_or(AppError::NotFound)?;
-    if !a.can(Capability::Comment) {
-        return Err(AppError::Refused("Your account cannot comment.".into()));
-    }
-    if locked(&story, now) {
-        return Err(AppError::Refused(
-            "This story is closed to new comments.".into(),
-        ));
-    }
-    let (_, per_hour) = level::limits(a.level);
-    if st.store.comments_since(a.user.id, now - 3_600).await? >= per_hour {
-        return Err(AppError::Refused(format!(
-            "You can post {per_hour} comments an hour. Try again later."
-        )));
-    }
-    check_text(&f.text, true)?;
-    let subject = record_ref(&story.at_uri, &story.at_cid)
-        .ok_or_else(|| AppError::Refused("This story has no record to reply to.".into()))?;
     let parent = if f.parent.is_empty() {
         None
     } else {
-        let p = st
-            .store
-            .comment(&f.parent)
-            .await?
-            .ok_or(AppError::NotFound)?;
-        if p.story_id != story.id || p.deleted_at.is_some() {
-            return Err(AppError::Refused(
-                "That comment cannot take replies.".into(),
-            ));
-        }
-        let r = record_ref(&p.at_uri, &p.at_cid)
-            .ok_or_else(|| AppError::Refused("That comment has no record to reply to.".into()))?;
-        Some((p.id, r))
+        Some(
+            st.store
+                .comment(&f.parent)
+                .await?
+                .ok_or(AppError::NotFound)?,
+        )
     };
+    let input = CommentInput {
+        story: &story,
+        parent: parent.as_ref(),
+        text: &f.text,
+    };
+    if let Err(r) = st.store.check_comment(&a.user, &input, &cx).await? {
+        return Err(AppError::Refused(r.to_string()));
+    }
+    let subject = record_ref(&story.at_uri, &story.at_cid)
+        .ok_or_else(|| AppError::Refused("This story has no record to reply to.".into()))?;
+    let parent_ref =
+        match &parent {
+            None => None,
+            Some(p) => Some(record_ref(&p.at_uri, &p.at_cid).ok_or_else(|| {
+                AppError::Refused("That comment has no record to reply to.".into())
+            })?),
+        };
 
     require_scopes(&st, &a.me.session, Flow::Base, &here).await?;
     let ns = st.auth.clients.ns;
-    let text = f.text.trim();
-    let record = comment_record(ns, &subject, parent.as_ref().map(|p| &p.1), text, now);
+    let record = comment_record(ns, &subject, parent_ref.as_ref(), f.text.trim(), cx.now);
     let written = st
         .writer
         .create(&a.me.session, &ns.comment(), &record)
         .await
         .map_err(|e| write_err(e, &here))?;
-    let inserted = st
+    let accepted = st
         .store
-        .insert_comment(&NewComment {
-            story_id: story.id,
-            user_id: a.user.id,
-            parent_id: parent.as_ref().map(|p| p.0),
-            body: text,
-            created_at: now,
-            record: Some((&written.uri, &written.cid)),
-        })
+        .accept_comment(&a.user, &input, (&written.uri, &written.cid), &cx)
         .await;
-    match inserted {
-        Ok(cid) => Ok(Redirect::to(&format!("{here}#c-{cid}")).into_response()),
-        Err(e) => {
-            let _ = st
-                .writer
-                .delete(&a.me.session, &ns.comment(), RecordRef::rkey(&written.uri))
-                .await;
-            Err(e.into())
-        }
+    if !matches!(accepted, Ok(Ok(_))) {
+        let _ = st
+            .writer
+            .delete(&a.me.session, &ns.comment(), RecordRef::rkey(&written.uri))
+            .await;
+    }
+    match accepted? {
+        Ok(acc) => Ok(Redirect::to(&format!("{here}#c-{}", acc.short_id)).into_response()),
+        Err(r) => Err(AppError::Refused(r.to_string())),
     }
 }
 
@@ -1064,7 +963,7 @@ pub async fn story_edit_page(
             nav: "",
             short_id,
             error: None,
-            url_locked: now - s.created_at > URL_EDIT_SECS,
+            url_locked: now - s.created_at > a.policy.url_edit_secs,
             title: s.title,
             url: s.url.unwrap_or_default(),
             text: s.body,
@@ -1083,7 +982,7 @@ pub async fn story_edit(
     check_csrf(&viewer, &f.csrf)?;
     let (a, s) = own_story(&st, &viewer, &short_id).await?;
     let now = (st.clock)();
-    let url_locked = now - s.created_at > URL_EDIT_SECS;
+    let url_locked = now - s.created_at > a.policy.url_edit_secs;
     let render_err =
         |msg: String, tags: Vec<TagChoice>, f: SubmitForm| -> Result<Response, AppError> {
             Ok(Html(
@@ -1484,7 +1383,7 @@ pub async fn profile(
         .await?
         .ok_or(AppError::NotFound)?;
     let now = (st.clock)();
-    let level = level::level(&user.account(now), &Thresholds::default());
+    let level = level::level(&user.account(now), &st.policy().thresholds);
     let mut stories: Vec<StoryView> = st
         .store
         .stories_by_user(user.id, 30)

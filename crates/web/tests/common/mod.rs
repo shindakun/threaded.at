@@ -25,6 +25,8 @@ pub fn state(
         blog: Arc::new(Blog::new(blog_dir, std::time::Duration::ZERO)),
         writer: Writer::Memory(repo),
         clock: Arc::new(move || now),
+        policy: Default::default(),
+        triage: false,
     }
 }
 

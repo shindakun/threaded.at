@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 rand = "0.9"
+thiserror = "2.0.21"
 threaded-core = { version = "0.1.0", path = "../core" }
 sqlx = { version = "0.8.6", default-features = false, features = ["sqlite", "runtime-tokio", "macros", "migrate"] }
 

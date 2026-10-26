@@ -30,6 +30,10 @@ pub struct AppState {
     pub auth: Arc<Auth>,
     pub writer: threaded_auth::records::Writer,
     pub clock: Arc<dyn Fn() -> i64 + Send + Sync>,
+    /// The rules in force. Admins change them at runtime.
+    pub policy: Arc<std::sync::RwLock<threaded_core::policy::Policy>>,
+    /// Whether AI triage is on: an API key is configured.
+    pub triage: bool,
 }
 
 impl AppState {
@@ -46,7 +50,18 @@ impl AppState {
                     .map(|d| d.as_secs() as i64)
                     .unwrap_or(0)
             }),
+            policy: Default::default(),
+            triage: false,
         }
+    }
+
+    /// A copy of the rules in force.
+    pub fn policy(&self) -> threaded_core::policy::Policy {
+        self.policy.read().map(|p| p.clone()).unwrap_or_default()
+    }
+
+    pub fn triage_on(&self) -> bool {
+        self.triage
     }
 }
 

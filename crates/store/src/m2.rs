@@ -277,50 +277,7 @@ impl Store {
 
     pub async fn insert_comment(&self, c: &NewComment<'_>) -> Result<String> {
         let mut tx = self.pool.begin().await?;
-        let depth: i64 = match c.parent_id {
-            Some(p) => {
-                sqlx::query_scalar::<_, i64>(
-                    "SELECT depth + 1 FROM comments WHERE id = ? AND story_id = ?",
-                )
-                .bind(p)
-                .bind(c.story_id)
-                .fetch_one(&mut *tx)
-                .await?
-            }
-            None => 0,
-        };
-        let sid = loop {
-            let candidate = short_id();
-            let taken: bool =
-                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM comments WHERE short_id = ?)")
-                    .bind(&candidate)
-                    .fetch_one(&mut *tx)
-                    .await?;
-            if !taken {
-                break candidate;
-            }
-        };
-        sqlx::query(
-            "INSERT INTO comments (short_id, story_id, user_id, parent_id, depth, body, created_at, at_uri, at_cid) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&sid)
-        .bind(c.story_id)
-        .bind(c.user_id)
-        .bind(c.parent_id)
-        .bind(depth)
-        .bind(c.body)
-        .bind(c.created_at)
-        .bind(c.record.map(|r| r.0))
-        .bind(c.record.map(|r| r.1))
-        .execute(&mut *tx)
-        .await?;
-        sqlx::query("UPDATE stories SET comment_count = comment_count + 1, last_comment_at = ? WHERE id = ?")
-            .bind(c.created_at)
-            .bind(c.story_id)
-            .execute(&mut *tx)
-            .await?;
-        recompute_rank(&mut tx, c.story_id).await?;
+        let (_, sid) = insert_comment_tx(&mut tx, c).await?;
         tx.commit().await?;
         Ok(sid)
     }
@@ -659,4 +616,58 @@ impl Store {
         .fetch_all(&self.pool)
         .await
     }
+}
+
+/// Inserts a comment inside the caller's transaction. Returns its ID and short ID.
+pub(crate) async fn insert_comment_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    c: &NewComment<'_>,
+) -> Result<(i64, String)> {
+    let depth: i64 = match c.parent_id {
+        Some(p) => {
+            sqlx::query_scalar::<_, i64>(
+                "SELECT depth + 1 FROM comments WHERE id = ? AND story_id = ?",
+            )
+            .bind(p)
+            .bind(c.story_id)
+            .fetch_one(&mut **tx)
+            .await?
+        }
+        None => 0,
+    };
+    let sid = loop {
+        let candidate = short_id();
+        let taken: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM comments WHERE short_id = ?)")
+                .bind(&candidate)
+                .fetch_one(&mut **tx)
+                .await?;
+        if !taken {
+            break candidate;
+        }
+    };
+    let comment_id: i64 = sqlx::query_scalar(
+        "INSERT INTO comments (short_id, story_id, user_id, parent_id, depth, body, created_at, at_uri, at_cid) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+    )
+    .bind(&sid)
+    .bind(c.story_id)
+    .bind(c.user_id)
+    .bind(c.parent_id)
+    .bind(depth)
+    .bind(c.body)
+    .bind(c.created_at)
+    .bind(c.record.map(|r| r.0))
+    .bind(c.record.map(|r| r.1))
+    .fetch_one(&mut **tx)
+    .await?;
+    sqlx::query(
+        "UPDATE stories SET comment_count = comment_count + 1, last_comment_at = ? WHERE id = ?",
+    )
+    .bind(c.created_at)
+    .bind(c.story_id)
+    .execute(&mut **tx)
+    .await?;
+    recompute_rank(tx, c.story_id).await?;
+    Ok((comment_id, sid))
 }

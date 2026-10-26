@@ -6,7 +6,9 @@ use sqlx::{QueryBuilder, Sqlite, SqlitePool};
 use threaded_core::rank::{self, RankInput};
 use threaded_core::search::{Query, Sort};
 
+mod accept;
 mod m2;
+pub use accept::*;
 pub use m2::*;
 
 pub use sqlx::Error;
@@ -175,68 +177,7 @@ impl Store {
     /// Tags must already exist. Returns the new story's short id.
     pub async fn insert_story(&self, s: &NewStory<'_>) -> Result<String> {
         let mut tx = self.pool.begin().await?;
-
-        let mut tag_ids = Vec::with_capacity(s.tags.len());
-        let mut tag_boost = 0.0;
-        for name in s.tags {
-            let (id, m): (i64, f64) =
-                sqlx::query_as("SELECT id, rank_boost FROM tags WHERE name = ? AND active = 1")
-                    .bind(name)
-                    .fetch_one(&mut *tx)
-                    .await?;
-            tag_ids.push(id);
-            tag_boost += m;
-        }
-
-        let rank = rank::compute(RankInput {
-            score: 1,
-            comment_points: 0.0,
-            tag_boost,
-            user_is_author: s.user_is_author,
-            is_link: s.link.is_some(),
-            created_at: s.created_at,
-        });
-
-        let short_id = loop {
-            let candidate = short_id();
-            let taken: bool =
-                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM stories WHERE short_id = ?)")
-                    .bind(&candidate)
-                    .fetch_one(&mut *tx)
-                    .await?;
-            if !taken {
-                break candidate;
-            }
-        };
-
-        let story_id: i64 = sqlx::query_scalar(
-            "INSERT INTO stories (short_id, user_id, title, url, canonical_url, domain, body, \
-             user_is_author, rank, created_at, at_uri, at_cid) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
-        )
-        .bind(&short_id)
-        .bind(s.user_id)
-        .bind(s.title)
-        .bind(s.link.map(|l| l.url.as_str()))
-        .bind(s.link.map(|l| l.canonical.as_str()))
-        .bind(s.link.map(|l| l.domain.as_str()))
-        .bind(s.body)
-        .bind(s.user_is_author)
-        .bind(rank)
-        .bind(s.created_at)
-        .bind(s.record.map(|r| r.0))
-        .bind(s.record.map(|r| r.1))
-        .fetch_one(&mut *tx)
-        .await?;
-
-        for id in tag_ids {
-            sqlx::query("INSERT INTO taggings (story_id, tag_id) VALUES (?, ?)")
-                .bind(story_id)
-                .bind(id)
-                .execute(&mut *tx)
-                .await?;
-        }
-
+        let (_, short_id) = insert_story_tx(&mut tx, s).await?;
         tx.commit().await?;
         Ok(short_id)
     }
@@ -373,4 +314,73 @@ pub(crate) fn short_id() -> String {
     (0..6)
         .map(|_| ALPHABET[rng.random_range(0..ALPHABET.len())] as char)
         .collect()
+}
+
+/// Inserts a story inside the caller's transaction. Returns its ID and short ID.
+pub(crate) async fn insert_story_tx(
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    s: &NewStory<'_>,
+) -> Result<(i64, String)> {
+    let mut tag_ids = Vec::with_capacity(s.tags.len());
+    let mut tag_boost = 0.0;
+    for name in s.tags {
+        let (id, m): (i64, f64) =
+            sqlx::query_as("SELECT id, rank_boost FROM tags WHERE name = ? AND active = 1")
+                .bind(name)
+                .fetch_one(&mut **tx)
+                .await?;
+        tag_ids.push(id);
+        tag_boost += m;
+    }
+
+    let rank = rank::compute(RankInput {
+        score: 1,
+        comment_points: 0.0,
+        tag_boost,
+        user_is_author: s.user_is_author,
+        is_link: s.link.is_some(),
+        created_at: s.created_at,
+    });
+
+    let short_id = loop {
+        let candidate = short_id();
+        let taken: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM stories WHERE short_id = ?)")
+                .bind(&candidate)
+                .fetch_one(&mut **tx)
+                .await?;
+        if !taken {
+            break candidate;
+        }
+    };
+
+    let story_id: i64 = sqlx::query_scalar(
+        "INSERT INTO stories (short_id, user_id, title, url, canonical_url, domain, body, \
+         user_is_author, rank, created_at, at_uri, at_cid) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+    )
+    .bind(&short_id)
+    .bind(s.user_id)
+    .bind(s.title)
+    .bind(s.link.map(|l| l.url.as_str()))
+    .bind(s.link.map(|l| l.canonical.as_str()))
+    .bind(s.link.map(|l| l.domain.as_str()))
+    .bind(s.body)
+    .bind(s.user_is_author)
+    .bind(rank)
+    .bind(s.created_at)
+    .bind(s.record.map(|r| r.0))
+    .bind(s.record.map(|r| r.1))
+    .fetch_one(&mut **tx)
+    .await?;
+
+    for id in tag_ids {
+        sqlx::query("INSERT INTO taggings (story_id, tag_id) VALUES (?, ?)")
+            .bind(story_id)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+    }
+
+    Ok((story_id, short_id))
 }
