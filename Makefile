@@ -1,4 +1,4 @@
-.PHONY: all help run seed build release test fmt fmt-check clippy audit md-lint lex-lint lex-validate a11y hooks check clean
+.PHONY: all help run seed hydrant build release test fmt fmt-check clippy audit md-lint lex-lint lex-validate a11y hooks check clean
 
 all: check ## Default: run the local check suite
 
@@ -10,6 +10,21 @@ run: ## Run the server on 127.0.0.1:8080
 
 seed: ## Load demo tags and stories into an empty database
 	cargo run -- seed
+
+# A hydrant build; see docs/0006-m4.md. Override with HYDRANT=/path/to/hydrant.
+HYDRANT ?= ../hydrant/target/release/hydrant
+DEV_NSIDS = at.threaded.dev.submission,at.threaded.dev.comment
+
+hydrant: ## Run a local hydrant indexing at.threaded.dev.* records, on ./hydrant.sock
+	@test -x "$(HYDRANT)" || { echo "no hydrant binary at $(HYDRANT): build it (docs/0006-m4.md) or set HYDRANT=path"; exit 1; }
+	HYDRANT_DATABASE_PATH=hydrant.db \
+	HYDRANT_API_BIND=unix:hydrant.sock \
+	HYDRANT_PLC_URL=https://plc.directory \
+	HYDRANT_DATA_COMPRESSION=lz4 \
+	HYDRANT_FILTER_SIGNALS=$(DEV_NSIDS) \
+	HYDRANT_FILTER_COLLECTIONS=$(DEV_NSIDS),at.threaded.dev.vote \
+	RUST_LOG=$${RUST_LOG:-info} \
+	"$(HYDRANT)"
 
 build: ## Debug build
 	cargo build

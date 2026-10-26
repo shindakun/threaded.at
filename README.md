@@ -33,13 +33,17 @@ make seed    # demo tags and stories into threaded.db
 make run     # serve on http://127.0.0.1:8080
 make check   # fmt-check, clippy, test, audit, markdown lint, lexicon lint and validation
 make a11y    # axe-core audit of every page, light and dark
+make hydrant # a local hydrant indexing at.threaded.dev.* records
 ```
 
 `make help` lists every target. `make audit` needs `cargo-audit`, `make md-lint`
 needs `markdownlint-cli2`, `make lex-lint` and `make lex-validate` need
 [goat](https://github.com/bluesky-social/goat), `make a11y` needs Node and
-Chrome (set `CHROME` if Chrome is not in its default place), and `make hooks`
-needs `pre-commit`.
+Chrome (set `CHROME` if Chrome is not in its default place), `make hooks`
+needs `pre-commit`, and `make hydrant` needs a hydrant build at
+`../hydrant/target/release/hydrant` (set `HYDRANT` to use another path; building
+it is in `docs/0006-m4.md`). It keeps its database in `./hydrant.db` and serves
+its API on `./hydrant.sock`.
 
 | Variable | Default |
 |---|---|
