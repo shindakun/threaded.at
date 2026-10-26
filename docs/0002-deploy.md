@@ -210,6 +210,6 @@ takes is the way back from a bad release.
 
 | Milestone | Adds to the droplet |
 |---|---|
-| M3 Moderation | The Anthropic API key in `threaded.env` |
+| M3 Moderation | The Anthropic API key file, named by `THREADED_ANTHROPIC_KEY` in `threaded.env`; the first admin, `threaded role grant DID admin`; the site rules, saved on `/admin/rules` |
 | M4 Indexer | hydrant as a second systemd service on a Unix socket in `/run/hydrant/`, with its database in `/var/lib/hydrant` |
 | Lexicons | A `_lexicon.threaded.at` TXT record naming the publishing DID |

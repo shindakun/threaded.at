@@ -639,7 +639,7 @@ in the mod log; settings changes record the old and new value.
 | `/admin/tags` | Every tag with its category, description, rank boost, and flags (`privileged`, `new_users_ok`, `is_media`, `active`); create and edit forms |
 | `/admin/people` | Moderators and admins, with grant and revoke; role badges in use |
 | `/admin/settings` | Level thresholds, rate limits, flag windows and limits, labelers, hold-precision floor, triage model ID |
-| `/admin/rules` | The site rules that triage reads, with version history; a new version must pass an eval run against past moderator decisions before it takes effect |
+| `/admin/rules` | The site rules that triage reads, with version history; once 50 moderator decisions on triage verdicts exist, a new version must pass an eval run against them before it takes effect |
 
 ## 10. Atmosphere features
 
@@ -808,9 +808,16 @@ Later migrations add `oauth_sessions`, `oauth_states`, `suggestions`,
 | M1 Sign-in | OAuth confidential client, metadata and JWKS endpoints, SQLite auth store, sessions, handle verification, sign-in form with handle lookahead, localhost dev flow | Built |
 | M2 Writing | Submit, comment, reply, upvote, flag, edit, delete; records to the PDS; public upvotes; profiles; Markdown; rate limits; levels enforced | Built |
 | M3 Moderation | Mod log, moderator queue and item and user review, admin pages, actions, notes, bans, merges, role badges, suggestions, AI triage | |
-| M4 Indexer | hydrant beside Threaded, stream consumer with cursor, backfill, edits, deletes, account events, records and votes from other apps | |
+| M4 Indexer | hydrant beside Threaded, stream consumer with cursor, backfill, edits, deletes, account events, records and votes from other apps, the Detached queue tab, hydrant lag on `/admin` | |
 | M5 Reader features | Inbox, read ribbons, saved, hidden, filters, feeds, cross-post, labelers | |
 | M6 Atmosphere | Project submissions, lexicon search, network stats | |
+
+Not yet in a milestone:
+
+- Mod mail and appeals (§9.6), and the queue's Mod mail tab.
+- Vouching and vouch trees (§8).
+- The eval gate on rules versions (§9.8), once 50 moderator decisions on
+  triage verdicts exist to test against.
 
 ## 17. Open questions
 
