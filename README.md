@@ -17,8 +17,8 @@ records in the author's own repo.
 
 M0 is built: the schema, ranking, levels, search, link canonicalization,
 read-only listings, the blog, the lexicon drafts, and an accessibility audit
-that every page passes. M1, sign-in, is built. Writing is M2. The milestone table is in the
-design doc, section 16.
+that every page passes. M1, sign-in, and M2, writing, are built. Moderation is
+M3. The milestone table is in the design doc, section 16.
 
 ## Quick start
 
@@ -27,12 +27,12 @@ Requires a stable Rust toolchain.
 ```sh
 make seed    # demo tags and stories into threaded.db
 make run     # serve on http://127.0.0.1:8080
-make check   # fmt-check, clippy, test, audit, markdown lint, lexicon lint
+make check   # fmt-check, clippy, test, audit, markdown lint, lexicon lint and validation
 make a11y    # axe-core audit of every page, light and dark
 ```
 
 `make help` lists every target. `make audit` needs `cargo-audit`, `make md-lint`
-needs `markdownlint-cli2`, `make lex-lint` needs
+needs `markdownlint-cli2`, `make lex-lint` and `make lex-validate` need
 [goat](https://github.com/bluesky-social/goat), `make a11y` needs Node and
 Chrome (set `CHROME` if Chrome is not in its default place), and `make hooks`
 needs `pre-commit`.
@@ -54,8 +54,24 @@ make run
 ```
 
 Open `http://127.0.0.1:8080`, not `localhost`: atproto's development client
-returns to `127.0.0.1`. Sign in with any atproto account. Threaded asks for the
-`atproto` scope only. `threaded keygen DIR` writes the production key files.
+returns to `127.0.0.1`. Sign in with any atproto account. `threaded keygen DIR`
+writes the production key files.
+
+A local build writes `at.threaded.dev.submission`, `.comment`, and `.vote`
+records to your real repo; production writes `at.threaded.*`. Sign-in asks to
+write submissions and comments. Publishing upvotes asks again, on
+`/settings`, for vote records.
+
+## Tags
+
+```sh
+threaded tag add rust --description "The Rust language and its ecosystem"
+threaded tag add meta --description "About Threaded itself" --boost -0.5
+threaded tag list
+```
+
+`tag add` on an existing tag updates it. `--boost` is the tag's rank boost,
+from -10 to 10. Both commands use `THREADED_DB`.
 
 ## Blog
 
@@ -84,7 +100,13 @@ section 12. A file that fails to parse is skipped and the reason is logged.
 | `/top?t=day\|week\|month\|year\|all` | Top by score |
 | `/t/{tag}` | Ranked within a tag |
 | `/domain/{domain}` | Newest from a domain and its subdomains |
-| `/s/{short_id}` | A story |
+| `/s/{short_id}` | A story and its comments |
+| `/s/{short_id}/edit`, `/s/{short_id}/delete` | Edit or delete your story |
+| `/c/{short_id}/reply`, `/c/{short_id}/edit`, `/c/{short_id}/delete` | Reply to a comment; edit or delete yours |
+| `/submit` | Submit a story |
+| `/comment`, `/vote`, `/flag` | Form targets for comments, upvotes, and flags |
+| `/u/{handle}` | A user's stories, comments, and public upvotes |
+| `/settings` | Public upvotes |
 | `/search?q=` | Search; syntax in the design doc, section 7 |
 | `/tags` | Tag list |
 | `/blog` | Blog index, newest first; `?page=2` and on |
@@ -96,9 +118,9 @@ section 12. A file that fails to parse is skipped and the reason is logged.
 ## Layout
 
 ```text
-src/main.rs        CLI: serve, seed, keygen
+src/main.rs        CLI: serve, seed, keygen, tag
 crates/core/       ranking, levels, search parser, links, tags
-crates/auth/       atproto OAuth: keys, SQLite session store, sign-in flow
+crates/auth/       atproto OAuth: keys, SQLite session store, sign-in flow, record writes
 crates/store/      SQLite via sqlx; migrations/ at the repo root
 crates/web/        axum router, askama templates, CSS
 migrations/        forward-only SQL migrations

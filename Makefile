@@ -1,4 +1,4 @@
-.PHONY: all help run seed build release test fmt fmt-check clippy audit md-lint lex-lint a11y hooks check clean
+.PHONY: all help run seed build release test fmt fmt-check clippy audit md-lint lex-lint lex-validate a11y hooks check clean
 
 all: check ## Default: run the local check suite
 
@@ -38,13 +38,20 @@ md-lint: ## Lint markdown
 lex-lint: ## Lint lexicon schemas (needs goat)
 	goat lex lint --lint-level info lexicons
 
+lex-validate: ## Validate sample records against the lexicons (needs goat)
+	rm -rf target/lex
+	mkdir -p target/lex/catalog
+	cp -R lexicons/. crates/auth/tests/lexicons/. target/lex/catalog/
+	RECORD_SAMPLES=$(CURDIR)/target/lex/records cargo test -q -p threaded-auth --test samples
+	for f in target/lex/records/*.json; do goat lex validate -c target/lex/catalog $$f || exit 1; done
+
 a11y: ## Audit every page with axe-core in light and dark (needs node and Chrome)
 	scripts/a11y/run.sh
 
 hooks: ## Install pre-commit hooks
 	pre-commit install
 
-check: fmt-check clippy test audit md-lint lex-lint ## Local suite, same as CI
+check: fmt-check clippy test audit md-lint lex-lint lex-validate ## Local suite, same as CI
 
 clean: ## Remove build output
 	cargo clean

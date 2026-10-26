@@ -32,6 +32,7 @@ async fn post(
         body: if url.is_none() { "text post" } else { "" },
         user_is_author: false,
         tags,
+        record: None,
         created_at: at,
     })
     .await
@@ -197,6 +198,7 @@ async fn unknown_tag_is_rejected() {
             body: "",
             user_is_author: false,
             tags: &["nope"],
+            record: None,
             created_at: T0,
         })
         .await;

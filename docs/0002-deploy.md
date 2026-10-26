@@ -177,7 +177,26 @@ The running server picks the post up within a second. No rebuild, no
 restart. A post with a front matter error is skipped and logged:
 `journalctl -u threaded | grep blog`.
 
-## 10. Updating
+## 10. Tags
+
+Create the starter tags once, as the service account so the database stays
+its own:
+
+```sh
+t() { sudo -u threaded env THREADED_DB=sqlite:/var/lib/threaded/threaded.db /opt/threaded/bin/threaded tag add "$@"; }
+t atproto --description "The AT Protocol, Bluesky, and the apps built on them"
+t rust --description "The Rust language and its ecosystem"
+t programming --description "Languages, tools, and practice"
+t web --description "Browsers, HTML, CSS, HTTP"
+t security --description "Vulnerabilities, cryptography, and defense"
+t show --description "Something you made"
+t ask --description "A question for the community"
+t meta --description "About Threaded itself" --boost -0.5
+```
+
+Running `tag add` again on a name updates it. `tag list` shows them all.
+
+## 11. Updating
 
 ```sh
 /opt/threaded/src/deploy/update.sh
@@ -187,7 +206,7 @@ It pulls, builds, takes a backup, installs the new binary, restarts the
 service, and checks `/healthz`. Migrations are forward-only, so the backup it
 takes is the way back from a bad release.
 
-## 11. Later milestones
+## 12. Later milestones
 
 | Milestone | Adds to the droplet |
 |---|---|

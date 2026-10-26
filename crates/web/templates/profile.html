@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ name }} | {{ site }}{% endblock %}
+{% block main %}
+<h1>{{ name }}</h1>
+<p class="meta">Joined {{ joined }} | karma {{ karma }} | {{ level }}</p>
+<h2>Stories</h2>
+{% if stories.is_empty() %}<p class="empty">No stories.</p>{% else %}
+<ol class="stories">{% for s in stories %}{% include "story_row.html" %}{% endfor %}</ol>
+{% endif %}
+<h2>Comments</h2>
+{% if comments.is_empty() %}<p class="empty">No comments.</p>{% else %}
+<ol class="profile-comments">
+{% for c in comments %}
+<li><article aria-label="Comment on {{ c.story_title }}">
+  <p class="meta"><a href="/s/{{ c.story_id }}#c-{{ c.short_id }}">{{ c.age }}</a> on <a href="/s/{{ c.story_id }}">{{ c.story_title }}</a></p>
+  <div class="prose">{{ c.body_html|safe }}</div>
+</article></li>
+{% endfor %}
+</ol>
+{% endif %}
+{% if let Some(l) = liked %}
+<h2>Liked</h2>
+{% if l.is_empty() %}<p class="empty">No liked stories.</p>{% else %}
+<ol class="stories">{% for s in l %}{% include "story_row.html" %}{% endfor %}</ol>
+{% endif %}
+{% endif %}
+{% endblock %}

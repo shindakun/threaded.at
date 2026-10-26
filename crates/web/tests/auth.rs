@@ -1,23 +1,20 @@
 mod common;
 
-use std::sync::Arc;
-
 use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
 use http_body_util::BodyExt;
 use threaded_store::Store;
-use threaded_web::blog::Blog;
-use threaded_web::{router, AppState};
+use threaded_web::router;
 use tower::ServiceExt;
 
 async fn setup() -> (axum::Router, Store) {
     let store = Store::open("sqlite::memory:").await.unwrap();
-    let app = router(AppState {
-        auth: common::auth(&store),
-        store: store.clone(),
-        blog: Arc::new(Blog::new("/nonexistent/blog", std::time::Duration::ZERO)),
-        clock: Arc::new(|| 1_790_000_000),
-    });
+    let app = router(common::state(
+        &store,
+        Default::default(),
+        1_790_000_000,
+        std::path::Path::new("/nonexistent/blog"),
+    ));
     (app, store)
 }
 
@@ -167,7 +164,10 @@ async fn localhost_client_metadata() {
     assert!(m["client_id"].as_str().unwrap().starts_with(
         "http://localhost/?redirect_uri=http%3A%2F%2F127.0.0.1%3A8080%2Foauth%2Fcallback"
     ));
-    assert_eq!(m["scope"], "atproto");
+    assert_eq!(
+        m["scope"],
+        "atproto repo:at.threaded.dev.comment repo:at.threaded.dev.submission repo:at.threaded.dev.vote?action=create&action=delete"
+    );
     assert_eq!(m["token_endpoint_auth_method"], "none");
     assert_eq!(m["dpop_bound_access_tokens"], true);
     assert_eq!(
@@ -226,7 +226,8 @@ async fn signed_in_header_and_sign_out() {
 
     let r = send(&app, get("/", &cookies)).await;
     assert!(
-        r.body.contains(r#"<span class="who">alice.example</span>"#),
+        r.body
+            .contains(r#"<a class="who" href="/u/alice.example">alice.example</a>"#),
         "{}",
         r.body
     );

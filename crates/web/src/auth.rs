@@ -13,9 +13,12 @@ use axum::{Form, Json};
 use axum_extra::extract::cookie::{Cookie, CookieJar, Key, PrivateCookieJar, SameSite};
 use rand::RngCore;
 use serde::Deserialize;
-use threaded_auth::client::Client;
+use std::sync::Arc;
+
+use threaded_auth::client::{Clients, Flow};
 use threaded_auth::flow::{self, FlowError};
 use threaded_auth::hosts::{host_of, HostView};
+use threaded_auth::records::SessionRef;
 use threaded_auth::store::SqliteAuthStore;
 
 use crate::{AppError, AppState, Page, SITE_NAME};
@@ -27,7 +30,7 @@ const TYPEAHEAD_WINDOW: Duration = Duration::from_secs(10);
 const TYPEAHEAD_HOST: &str = "https://public.api.bsky.app";
 
 pub struct Auth {
-    pub client: Client,
+    pub clients: Arc<Clients>,
     pub store: SqliteAuthStore,
     pub key: Key,
     /// Production: `Secure` cookies with the `__Host-` prefix.
@@ -43,9 +46,14 @@ struct Typeahead {
 }
 
 impl Auth {
-    pub fn new(client: Client, store: SqliteAuthStore, cookie_key: &[u8], secure: bool) -> Auth {
+    pub fn new(
+        clients: Arc<Clients>,
+        store: SqliteAuthStore,
+        cookie_key: &[u8],
+        secure: bool,
+    ) -> Auth {
         Auth {
-            client,
+            clients,
             store,
             key: Key::from(cookie_key),
             secure,
@@ -133,12 +141,27 @@ pub async fn cookie_layer(State(st): State<AppState>, mut req: Request, next: Ne
 pub struct Viewer {
     pub name: Option<String>,
     pub csrf: String,
+    pub me: Option<Me>,
 }
 
-fn session_of(jar: &PrivateCookieJar, auth: &Auth) -> Option<(String, String)> {
+#[derive(Clone)]
+pub struct Me {
+    pub user_id: i64,
+    pub session: SessionRef,
+}
+
+/// The session cookie holds `DID SESSION_ID FLOW`.
+fn session_of(jar: &PrivateCookieJar, auth: &Auth) -> Option<SessionRef> {
     let c = jar.get(&auth.name("threaded"))?;
-    let (did, sid) = c.value().split_once(' ')?;
-    Some((did.to_string(), sid.to_string()))
+    let mut parts = c.value().split(' ');
+    let did = parts.next()?.to_string();
+    let session_id = parts.next()?.to_string();
+    let flow = Flow::parse(parts.next().unwrap_or("base"));
+    Some(SessionRef {
+        did,
+        session_id,
+        flow,
+    })
 }
 
 impl FromRequestParts<AppState> for Viewer {
@@ -151,30 +174,33 @@ impl FromRequestParts<AppState> for Viewer {
             .map(|t| t.0.clone())
             .unwrap_or_default();
         let jar = PrivateCookieJar::from_headers(&parts.headers, st.auth.key.clone());
-        let mut name = None;
-        if let Some((did, sid)) = session_of(&jar, &st.auth) {
-            if st
+        let mut viewer = Viewer {
+            name: None,
+            csrf,
+            me: None,
+        };
+        if let Some(session) = session_of(&jar, &st.auth) {
+            let live = st
                 .auth
                 .store
-                .session_exists(&did, &sid)
+                .session_exists(&session.did, &session.session_id)
                 .await
-                .unwrap_or(false)
-            {
-                name = Some(
-                    st.store
-                        .display_name(&did)
-                        .await
-                        .ok()
-                        .flatten()
-                        .unwrap_or(did),
-                );
+                .unwrap_or(false);
+            if live {
+                if let Ok(Some(user)) = st.store.user_by_did(&session.did).await {
+                    viewer.name = Some(user.name().to_string());
+                    viewer.me = Some(Me {
+                        user_id: user.id,
+                        session,
+                    });
+                }
             }
         }
-        Ok(Viewer { name, csrf })
+        Ok(viewer)
     }
 }
 
-fn check_csrf(viewer: &Viewer, form_token: &str) -> Result<(), AppError> {
+pub(crate) fn check_csrf(viewer: &Viewer, form_token: &str) -> Result<(), AppError> {
     if viewer.csrf.is_empty() || viewer.csrf != form_token {
         return Err(AppError::Forbidden);
     }
@@ -217,6 +243,7 @@ struct ConfirmPage {
     host: HostView,
     pds: Option<HostView>,
     next: String,
+    flow: &'static str,
     changed: bool,
 }
 
@@ -264,6 +291,8 @@ pub struct LoginForm {
     identifier: String,
     #[serde(default)]
     next: String,
+    #[serde(default)]
+    flow: String,
 }
 
 async fn confirm(
@@ -271,9 +300,10 @@ async fn confirm(
     viewer: Viewer,
     identifier: String,
     next: String,
+    flow: Flow,
     changed: bool,
 ) -> Page {
-    match flow::resolve(&st.auth.client, &identifier).await {
+    match flow::resolve(&st.auth.clients, &identifier).await {
         Ok(r) => Ok(Html(
             ConfirmPage {
                 site: SITE_NAME,
@@ -284,6 +314,7 @@ async fn confirm(
                 host: r.auth_host,
                 pds: r.pds_host,
                 next,
+                flow: flow.as_str(),
                 changed,
             }
             .render()?,
@@ -312,7 +343,7 @@ pub async fn login_submit(
             Some("Enter your handle or your server's address.".into()),
         );
     }
-    confirm(&st, viewer, identifier, next, false).await
+    confirm(&st, viewer, identifier, next, Flow::parse(&f.flow), false).await
 }
 
 #[derive(Deserialize)]
@@ -322,6 +353,8 @@ pub struct GoForm {
     host: String,
     #[serde(default)]
     next: String,
+    #[serde(default)]
+    flow: String,
 }
 
 pub async fn login_go(
@@ -333,7 +366,8 @@ pub async fn login_go(
     check_csrf(&viewer, &f.csrf)?;
     let next = safe_next(&f.next);
     let identifier = flow::normalize(&f.identifier);
-    let url = match flow::start(&st.auth.client, &identifier).await {
+    let flow = Flow::parse(&f.flow);
+    let url = match flow::start(&st.auth.clients, flow, &identifier).await {
         Ok(u) => u,
         Err(e) => {
             tracing::warn!(error = %e, "sign-in: start failed");
@@ -347,11 +381,16 @@ pub async fn login_go(
     };
     let host = host_of(&url).map(|h| h.ascii).unwrap_or_default();
     if host != f.host {
-        return Ok(confirm(&st, viewer, identifier, next, true)
+        return Ok(confirm(&st, viewer, identifier, next, flow, true)
             .await?
             .into_response());
     }
-    let jar = jar.add(st.auth.cookie("return", next, SameSite::Lax));
+    let jar = jar
+        .add(st.auth.cookie("return", next, SameSite::Lax))
+        .add(
+            st.auth
+                .cookie("flow", flow.as_str().to_string(), SameSite::Lax),
+        );
     Ok((jar, Redirect::to(&url)).into_response())
 }
 
@@ -402,7 +441,21 @@ pub async fn callback(
         )?
         .into_response());
     };
-    match flow::finish(&st.auth.client, code, q.state.as_deref(), q.iss.as_deref()).await {
+    let flow = Flow::parse(
+        jar.get(&st.auth.name("flow"))
+            .map(|c| c.value().to_string())
+            .as_deref()
+            .unwrap_or("base"),
+    );
+    match flow::finish(
+        &st.auth.clients,
+        flow,
+        code,
+        q.state.as_deref(),
+        q.iss.as_deref(),
+    )
+    .await
+    {
         Ok(si) => {
             let (shown, verified) = match &si.verified_handle {
                 Some(h) => (h.clone(), true),
@@ -417,10 +470,13 @@ pub async fn callback(
                 .unwrap_or_else(|| "/".into());
             let jar = jar
                 .remove(Cookie::build(st.auth.name("return")).path("/"))
-                .add(
-                    st.auth
-                        .session_cookie(format!("{} {}", si.did, si.session_id)),
-                );
+                .remove(Cookie::build(st.auth.name("flow")).path("/"))
+                .add(st.auth.session_cookie(format!(
+                    "{} {} {}",
+                    si.did,
+                    si.session_id,
+                    flow.as_str()
+                )));
             Ok((jar, Redirect::to(&next)).into_response())
         }
         Err(e) => {
@@ -448,8 +504,8 @@ pub async fn logout(
     Form(f): Form<CsrfForm>,
 ) -> Result<Response, AppError> {
     check_csrf(&viewer, &f.csrf)?;
-    if let Some((did, sid)) = session_of(&jar, &st.auth) {
-        flow::sign_out(&st.auth.client, &did, &sid).await;
+    if let Some(s) = session_of(&jar, &st.auth) {
+        flow::sign_out(&st.auth.clients, s.flow, &s.did, &s.session_id).await;
     }
     let jar = jar.remove(Cookie::build(st.auth.name("threaded")).path("/"));
     Ok((jar, Redirect::to("/")).into_response())
@@ -458,13 +514,13 @@ pub async fn logout(
 pub async fn client_metadata(State(st): State<AppState>) -> Response {
     (
         [(header::CACHE_CONTROL, "public, max-age=300")],
-        Json(st.auth.client.metadata_json()),
+        Json(st.auth.clients.metadata_json()),
     )
         .into_response()
 }
 
 pub async fn jwks(State(st): State<AppState>) -> Response {
-    match st.auth.client.jwks_json() {
+    match st.auth.clients.jwks_json() {
         Some(j) => ([(header::CACHE_CONTROL, "public, max-age=300")], Json(j)).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
     }

@@ -1,5 +1,9 @@
+{% import "macros.html" as m %}
 <li class="story">
-  <div class="score">{{ s.score }}<span class="vh"> points</span></div>
+  <div class="score">
+    {% if s.can_vote %}{% call m::vote("story", s.short_id, s.voted, s.score, s.title, viewer.csrf, here) %}{% endcall %}{% endif %}
+    <span class="n" data-score>{{ s.score }}</span><span class="vh"> points</span>
+  </div>
   <div class="body">
     <div class="line">
       <a class="title" href="{{ s.href }}">{{ s.title }}</a>
@@ -7,7 +11,7 @@
       {% if !s.domain.is_empty() %}<a class="domain" href="/domain/{{ s.domain }}">{{ s.domain }}</a>{% endif %}
     </div>
     <div class="meta">
-      by <span class="handle">{{ s.handle }}</span> {{ s.age }} |
+      by <a class="handle" href="/u/{{ s.handle }}">{{ s.handle }}</a> {{ s.age }} |
       <a href="/s/{{ s.short_id }}">{% if s.comments == 0 %}no comments{% else if s.comments == 1 %}1 comment{% else %}{{ s.comments }} comments{% endif %}</a>
     </div>
   </div>

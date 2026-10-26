@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "macros.html" as m %}
 {% block title %}{{ heading }} | {{ site }}{% endblock %}
 {% block main %}
 <h1{% if hide_heading %} class="vh"{% endif %}>{{ heading }}</h1>

@@ -1,4 +1,4 @@
-// usage: node audit.mjs BASE_URL PATH...
+// usage: [A11Y_COOKIE=name=value] node audit.mjs BASE_URL PATH...
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter, join } from "node:path";
@@ -31,6 +31,11 @@ let failures = 0;
 for (const scheme of ["light", "dark"]) {
   for (const path of paths) {
     const page = await browser.newPage();
+    // A11Y_COOKIE (name=value) audits the pages as a signed-in user.
+    if (process.env.A11Y_COOKIE) {
+      const [name, ...value] = process.env.A11Y_COOKIE.split("=");
+      await page.setCookie({ name, value: value.join("="), url: base });
+    }
     await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: scheme }]);
     await page.goto(base + path, { waitUntil: "load" });
     await page.addScriptTag({ content: axeSource });

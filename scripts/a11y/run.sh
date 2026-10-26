@@ -9,8 +9,9 @@ base="http://127.0.0.1:$port"
 export THREADED_DB="sqlite:$tmp/a11y.db"
 export THREADED_ADDR="127.0.0.1:$port"
 export THREADED_BLOG_DIR="$tmp/blog"
+export THREADED_COOKIE_KEY="$tmp/keys/cookie.key"
 
-mkdir "$tmp/blog"
+mkdir "$tmp/blog" "$tmp/keys"
 cat >"$tmp/blog/sample.md" <<'MD'
 ---
 title: Sample post
@@ -40,8 +41,13 @@ fn main() {}
 MD
 
 cargo build --quiet
+cargo build --quiet -p threaded-web --example a11y_fixture
 bin=target/debug/threaded
+"$bin" keygen "$tmp/keys" >/dev/null
 "$bin" seed >/dev/null 2>&1
+# Signed-in session cookie, then the fixture story and comment IDs.
+set -- $(target/debug/examples/a11y_fixture "$THREADED_DB" "$THREADED_COOKIE_KEY")
+cookie=$1 mine=/s/$2 comment=$3
 "$bin" serve >"$tmp/serve.log" 2>&1 &
 pid=$!
 trap 'rc=$?; kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null || true; rm -rf "$tmp"; exit $rc' EXIT
@@ -57,3 +63,6 @@ story=$(curl -fs "$base/newest" | grep -o 'href="/s/[a-z0-9]*"' | head -1 | cut 
 
 (cd "$here" && npm ci --silent --no-audit --no-fund)
 node "$here/audit.mjs" "$base" / /newest /active /top /t/rust /domain/example.com /tags /search "/search?q=rust" "$story" /s/nope00 /blog /blog/sample /login "/oauth/callback?error=access_denied"
+# A dead session would redirect every page to /login and pass vacuously.
+curl -fs -H "Cookie: $cookie" "$base/settings" | grep -q 'href="/u/a11y.example"' || { echo "fixture session is not signed in"; exit 1; }
+A11Y_COOKIE="$cookie" node "$here/audit.mjs" "$base" / "$mine" "$mine/edit" /submit "/c/$comment/reply" "/c/$comment/edit" /settings /u/a11y.example /u/other.example

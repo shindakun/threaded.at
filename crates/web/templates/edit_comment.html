@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Edit comment | {{ site }}{% endblock %}
+{% block main %}
+<h1>Edit comment</h1>
+<form method="post" action="/c/{{ short_id }}/edit" class="comment-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <label for="edit-text">Comment</label>
+  <textarea id="edit-text" name="text" rows="6" required>{{ text }}</textarea>
+  <button type="submit" class="primary">Save</button>
+</form>
+<p><a href="/s/{{ story_id }}#c-{{ short_id }}">Back to the story</a></p>
+{% endblock %}

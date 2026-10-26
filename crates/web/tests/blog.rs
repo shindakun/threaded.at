@@ -1,25 +1,22 @@
 mod common;
 
 use std::path::Path;
-use std::sync::Arc;
-use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use threaded_store::Store;
-use threaded_web::blog::Blog;
-use threaded_web::{router, AppState};
+use threaded_web::router;
 use tower::ServiceExt;
 
 async fn app(dir: &Path) -> axum::Router {
     let store = Store::open("sqlite::memory:").await.unwrap();
-    router(AppState {
-        auth: common::auth(&store),
-        store,
-        blog: Arc::new(Blog::new(dir, Duration::ZERO)),
-        clock: Arc::new(|| 1_790_000_000),
-    })
+    router(common::state(
+        &store,
+        Default::default(),
+        1_790_000_000,
+        dir,
+    ))
 }
 
 async fn get(app: &axum::Router, uri: &str) -> (StatusCode, String) {

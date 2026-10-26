@@ -1,5 +1,7 @@
 pub mod auth;
 pub mod blog;
+pub mod markdown;
+pub mod write;
 
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -26,15 +28,18 @@ pub struct AppState {
     pub store: Store,
     pub blog: Arc<Blog>,
     pub auth: Arc<Auth>,
+    pub writer: threaded_auth::records::Writer,
     pub clock: Arc<dyn Fn() -> i64 + Send + Sync>,
 }
 
 impl AppState {
     pub fn new(store: Store, blog: Blog, auth: Auth) -> AppState {
+        let writer = threaded_auth::records::Writer::Pds(auth.clients.clone());
         AppState {
             store,
             blog: Arc::new(blog),
             auth: Arc::new(auth),
+            writer,
             clock: Arc::new(|| {
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -59,7 +64,30 @@ pub fn router(state: AppState) -> Router {
         .route("/top", get(top))
         .route("/t/{tag}", get(by_tag))
         .route("/domain/{domain}", get(by_domain))
-        .route("/s/{short_id}", get(story))
+        .route("/s/{short_id}", get(write::story_page))
+        .route(
+            "/s/{short_id}/edit",
+            get(write::story_edit_page).post(write::story_edit),
+        )
+        .route(
+            "/s/{short_id}/delete",
+            axum::routing::post(write::story_delete),
+        )
+        .route("/c/{short_id}/reply", get(write::reply_page))
+        .route(
+            "/c/{short_id}/edit",
+            get(write::comment_edit_page).post(write::comment_edit),
+        )
+        .route(
+            "/c/{short_id}/delete",
+            axum::routing::post(write::comment_delete),
+        )
+        .route("/submit", get(write::submit_page).post(write::submit))
+        .route("/comment", axum::routing::post(write::comment))
+        .route("/vote", axum::routing::post(write::vote))
+        .route("/flag", axum::routing::post(write::flag))
+        .route("/settings", get(write::settings_page).post(write::settings))
+        .route("/u/{handle}", get(write::profile))
         .route("/search", get(search_page))
         .route("/tags", get(tags))
         .route("/blog", get(blog_index))
@@ -74,6 +102,7 @@ pub fn router(state: AppState) -> Router {
         .route("/healthz", get(|| async { "ok" }))
         .route("/static/site.css", get(css))
         .route("/static/login.js", get(login_js))
+        .route("/static/vote.js", get(vote_js))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             auth::cookie_layer,
@@ -83,6 +112,10 @@ pub fn router(state: AppState) -> Router {
 }
 
 pub struct StoryView {
+    pub id: i64,
+    pub author_did: String,
+    pub voted: bool,
+    pub can_vote: bool,
     pub short_id: String,
     pub title: String,
     pub href: String,
@@ -95,8 +128,12 @@ pub struct StoryView {
 }
 
 impl StoryView {
-    fn from_row(r: StoryRow, now: i64) -> StoryView {
+    pub(crate) fn from_row(r: StoryRow, now: i64) -> StoryView {
         StoryView {
+            id: r.id,
+            author_did: r.author_did.clone(),
+            voted: false,
+            can_vote: false,
             href: r
                 .url
                 .clone()
@@ -130,6 +167,7 @@ pub fn ago(secs: i64) -> String {
 struct ListPage {
     site: &'static str,
     viewer: Viewer,
+    here: String,
     heading: String,
     hide_heading: bool,
     nav: &'static str,
@@ -140,19 +178,11 @@ struct ListPage {
 }
 
 #[derive(Template)]
-#[template(path = "story.html")]
-struct StoryPage {
-    site: &'static str,
-    viewer: Viewer,
-    nav: &'static str,
-    s: StoryView,
-}
-
-#[derive(Template)]
 #[template(path = "search.html")]
 struct SearchPage {
     site: &'static str,
     viewer: Viewer,
+    here: String,
     nav: &'static str,
     q: String,
     searched: bool,
@@ -201,6 +231,12 @@ struct ErrorPage {
 pub enum AppError {
     NotFound,
     Forbidden,
+    /// Sign-in is needed; returns to this path afterwards.
+    SignIn(String),
+    /// The request breaks a rule; the message says which.
+    Refused(String),
+    /// The user's PDS refused a write.
+    Upstream(String),
     Store(threaded_store::Error),
     Render(askama::Error),
 }
@@ -220,6 +256,27 @@ impl From<askama::Error> for AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
+            AppError::SignIn(next) => {
+                let next: String = next
+                    .bytes()
+                    .map(|b| match b {
+                        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'/' | b'-' | b'_' | b'.' => {
+                            (b as char).to_string()
+                        }
+                        _ => format!("%{b:02X}"),
+                    })
+                    .collect();
+                return axum::response::Redirect::to(&format!("/login?next={next}"))
+                    .into_response();
+            }
+            AppError::Refused(m) => (StatusCode::BAD_REQUEST, m),
+            AppError::Upstream(m) => {
+                tracing::warn!(error = %m, "PDS write refused");
+                (
+                    StatusCode::BAD_GATEWAY,
+                    format!("Your server refused the change: {m}"),
+                )
+            }
             AppError::NotFound => (StatusCode::NOT_FOUND, "Not found.".to_string()),
             AppError::Forbidden => (
                 StatusCode::FORBIDDEN,
@@ -298,16 +355,23 @@ async fn listing(st: &AppState, viewer: Viewer, spec: Spec<'_>, page: Option<i64
         )
         .await?;
     let more = rows.len() as i64 > PAGE_SIZE;
-    let stories = rows
+    let mut stories: Vec<StoryView> = rows
         .into_iter()
         .take(PAGE_SIZE as usize)
         .map(|r| StoryView::from_row(r, now))
         .collect();
+    mark_votes(st, &viewer, &mut stories).await?;
     let link = |p: i64| format!("{}?page={p}{}", spec.base, spec.extra);
+    let here = if page > 1 {
+        link(page)
+    } else {
+        spec.base.to_string()
+    };
     Ok(Html(
         ListPage {
             site: SITE_NAME,
             viewer,
+            here,
             hide_heading: spec.hide_heading,
             heading: spec.heading,
             nav: spec.nav,
@@ -414,20 +478,6 @@ async fn by_domain(
     listing(&st, viewer, spec, p.page).await
 }
 
-async fn story(State(st): State<AppState>, viewer: Viewer, Path(short_id): Path<String>) -> Page {
-    let row = st.store.story(&short_id).await?.ok_or(AppError::NotFound)?;
-    let now = (st.clock)();
-    Ok(Html(
-        StoryPage {
-            site: SITE_NAME,
-            viewer,
-            nav: "",
-            s: StoryView::from_row(row, now),
-        }
-        .render()?,
-    ))
-}
-
 #[derive(Deserialize)]
 struct SearchParams {
     q: Option<String>,
@@ -441,16 +491,18 @@ async fn search_page(
     let q = p.q.unwrap_or_default();
     let parsed = search::parse(&q);
     let now = (st.clock)();
-    let stories = st
+    let mut stories: Vec<StoryView> = st
         .store
         .search(&parsed, PAGE_SIZE, 0)
         .await?
         .into_iter()
         .map(|r| StoryView::from_row(r, now))
         .collect();
+    mark_votes(&st, &viewer, &mut stories).await?;
     Ok(Html(
         SearchPage {
             site: SITE_NAME,
+            here: "/search".into(),
             viewer,
             nav: "search",
             searched: !parsed.is_empty(),
@@ -521,6 +573,29 @@ async fn blog_post(State(st): State<AppState>, viewer: Viewer, Path(slug): Path<
         }
         .render()?,
     ))
+}
+
+/// Marks which stories the viewer upvoted and may vote on.
+pub(crate) async fn mark_votes(
+    st: &AppState,
+    viewer: &Viewer,
+    stories: &mut [StoryView],
+) -> Result<(), AppError> {
+    let Some(me) = &viewer.me else { return Ok(()) };
+    let ids: Vec<i64> = stories.iter().map(|s| s.id).collect();
+    let voted = st.store.upvoted_stories(me.user_id, &ids).await?;
+    for s in stories.iter_mut() {
+        s.can_vote = s.author_did != me.session.did;
+        s.voted = voted.contains(&s.id);
+    }
+    Ok(())
+}
+
+async fn vote_js() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        include_str!("../static/vote.js"),
+    )
 }
 
 async fn login_js() -> impl IntoResponse {

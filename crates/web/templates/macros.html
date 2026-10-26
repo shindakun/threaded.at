@@ -1,0 +1,42 @@
+{% macro vote(kind, id, voted, score, label, csrf, next) %}
+<form method="post" action="/vote" class="vote">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="kind" value="{{ kind }}">
+  <input type="hidden" name="id" value="{{ id }}">
+  <input type="hidden" name="next" value="{{ next }}">
+  <button type="submit" aria-pressed="{% if voted %}true{% else %}false{% endif %}" aria-label="Upvote: {{ label }}"><span aria-hidden="true">&#9650;</span></button>
+</form>
+{% endmacro %}
+
+{% macro flag(fv, csrf, next) %}
+{% if !fv.received.is_empty() %}<p class="flagged">Flagged: {% for r in fv.received %}{{ r.0 }} ({{ r.1 }}){% if !loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+{% if fv.allowed %}
+{% if let Some(cur) = fv.current %}
+<form method="post" action="/flag" class="inline">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="kind" value="{{ fv.kind }}">
+  <input type="hidden" name="id" value="{{ fv.id }}">
+  <input type="hidden" name="reason" value="">
+  <input type="hidden" name="next" value="{{ next }}">
+  <button type="submit" class="linkish">Unflag ({{ cur }})</button>
+</form>
+{% else %}
+<details class="flag">
+  <summary>Flag</summary>
+  <form method="post" action="/flag">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="kind" value="{{ fv.kind }}">
+    <input type="hidden" name="id" value="{{ fv.id }}">
+    <input type="hidden" name="next" value="{{ next }}">
+    <fieldset>
+      <legend>Why?</legend>
+      {% for r in fv.reasons %}
+      <label><input type="radio" name="reason" value="{{ r.0 }}" required> {{ r.1 }}</label>
+      {% endfor %}
+    </fieldset>
+    <button type="submit" class="secondary">Flag</button>
+  </form>
+</details>
+{% endif %}
+{% endif %}
+{% endmacro %}

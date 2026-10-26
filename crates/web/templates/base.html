@@ -18,10 +18,12 @@
     <a href="/tags"{% if nav == "tags" %} aria-current="page"{% endif %}>tags</a>
     <a href="/search"{% if nav == "search" %} aria-current="page"{% endif %}>search</a>
     <a href="/blog"{% if nav == "blog" %} aria-current="page"{% endif %}>blog</a>
+    {% if viewer.me.is_some() %}<a href="/submit"{% if nav == "submit" %} aria-current="page"{% endif %}>submit</a>{% endif %}
   </nav>
   <div class="account">
     {% if let Some(name) = viewer.name %}
-    <span class="who">{{ name }}</span>
+    <a class="who" href="/u/{{ name }}">{{ name }}</a>
+    <a href="/settings">settings</a>
     <form method="post" action="/logout">
       <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
       <button type="submit" class="linkish">Sign out</button>
@@ -34,5 +36,6 @@
 <main id="main" tabindex="-1">
 {% block main %}{% endblock %}
 </main>
+{% if viewer.me.is_some() %}<script src="/static/vote.js" defer></script>{% endif %}
 </body>
 </html>

@@ -108,7 +108,15 @@ h1 { font-size: 18px; margin: 4px 0 14px; }
   color: var(--tag-ink);
   text-decoration: none;
 }
-.domain { font: 12px var(--mono); color: var(--muted); text-decoration: none; }
+.domain {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  vertical-align: middle;
+  font: 12px var(--mono);
+  color: var(--muted);
+  text-decoration: none;
+}
 .meta { font-size: 12.5px; color: var(--muted); }
 .meta a { color: var(--muted); }
 .handle { color: var(--soft); }
@@ -212,3 +220,88 @@ button.secondary { background: var(--panel); color: var(--ink); border: 1px soli
 .suggest img { border-radius: 50%; }
 .suggest .name { color: var(--ink); font-weight: 600; }
 .suggest .handle { color: var(--muted); }
+
+/* Voting */
+.score { display: flex; flex-direction: column; align-items: flex-end; }
+.vote { margin: 0; }
+.vote button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  font-size: 11px;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.vote button:hover { border-color: var(--field); }
+.vote button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+
+/* Story and comment actions */
+.story-text { margin: 4px 0 8px 46px; }
+.item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.item-actions > a, .item-actions summary, .item-actions .linkish {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  color: var(--soft);
+}
+.item-actions summary { cursor: pointer; text-decoration: underline; }
+.item-actions details[open] { flex-basis: 100%; }
+.item-actions details form { margin: 6px 0 4px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; }
+.item-actions details p { margin: 0 0 8px; }
+.inline { display: inline; margin: 0; }
+.edited { align-self: center; font-style: italic; }
+.flagged { flex-basis: 100%; margin: 0; color: var(--accent); }
+.flag fieldset { border: 0; margin: 0 0 8px; padding: 0; }
+.flag legend { padding: 0; margin-bottom: 4px; font-weight: 600; color: var(--ink); }
+.flag label { display: flex; align-items: center; gap: 6px; min-height: 28px; color: var(--ink); }
+main > .item-actions { margin: 0 0 8px 46px; }
+
+/* Comments */
+.comments { margin-top: 24px; }
+.comments h2 { font-size: 16px; }
+.thread { list-style: none; margin: 0; padding: 0; }
+.thread .thread { margin-left: 18px; padding-left: 12px; border-left: 2px solid var(--rule); }
+.comment { padding: 8px 0; }
+.comment .prose p { margin: 4px 0; }
+.comment-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.comment-head a { display: inline-flex; align-items: center; min-height: 24px; }
+.comment-head .age { color: var(--muted); }
+.deleted { color: var(--muted); margin: 4px 0; }
+
+/* Forms */
+.post-form, .comment-form { display: flex; flex-direction: column; gap: 6px; max-width: 42rem; margin-bottom: 18px; }
+.post-form > label, .comment-form > label { font-weight: 600; margin-top: 8px; }
+.post-form input[type="text"], .post-form input[type="url"], .post-form textarea, .comment-form textarea {
+  width: 100%;
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--field);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+}
+.post-form button, .comment-form button { align-self: flex-start; margin-top: 8px; }
+.hint { margin: 0; font-size: 13px; color: var(--muted); }
+.tags-pick { border: 1px solid var(--rule); border-radius: 6px; margin: 10px 0 0; padding: 8px 12px; }
+.tags-pick legend { font-weight: 600; padding: 0 4px; }
+.tags-pick label { display: flex; align-items: center; gap: 8px; min-height: 30px; font-size: 14px; }
+.post-form .check-line { display: flex; align-items: center; gap: 8px; min-height: 30px; font-weight: 400; }
+
+/* Profile */
+.profile-comments { list-style: none; margin: 0; padding: 0; }
+.profile-comments li { padding: 8px 0; border-bottom: 1px solid var(--rule); }
+.profile-comments .meta { margin: 0; }
+.profile-comments .meta a { display: inline-flex; align-items: center; min-height: 24px; }

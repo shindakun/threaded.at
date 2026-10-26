@@ -4,11 +4,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use threaded_core::link;
 use threaded_store::{NewStory, Store};
 
-const USAGE: &str = "usage: threaded [serve | seed | keygen DIR]
+const USAGE: &str = "usage: threaded [serve | seed | keygen DIR | tag add NAME --description TEXT [--boost N] | tag list]
 
   serve       run the web server (default)
   seed        load demo tags and stories into the database
   keygen DIR  write a new OAuth signing key and cookie key into DIR
+  tag add     create or update a tag
+  tag list    list tags
 
 environment:
   THREADED_DB          database URL (default sqlite:threaded.db)
@@ -33,6 +35,13 @@ async fn main() -> ExitCode {
     let result = match cmd.as_deref() {
         None | Some("serve") => serve(&db).await,
         Some("seed") => seed(&db).await,
+        Some("tag") => match tag(&db, std::env::args().skip(2).collect()).await {
+            Err(e) if e.to_string() == "usage" => {
+                eprintln!("{USAGE}");
+                return ExitCode::from(2);
+            }
+            r => r,
+        },
         Some("keygen") => match std::env::args().nth(2) {
             Some(dir) => keygen(&dir),
             None => {
@@ -85,7 +94,7 @@ fn auth(store: &Store, addr: &str) -> Result<threaded_web::auth::Auth, BoxError>
             )?;
             let keyset = keys::load_keyset(std::path::Path::new(&key_path))?;
             let cookie_key = keys::load_cookie_key(std::path::Path::new(&cookie_path))?;
-            let client = build(
+            let clients = build(
                 Mode::Hosted {
                     public_url: public_url.clone(),
                     keyset,
@@ -94,7 +103,7 @@ fn auth(store: &Store, addr: &str) -> Result<threaded_web::auth::Auth, BoxError>
             )?;
             tracing::info!("OAuth client {public_url}/oauth-client-metadata.json");
             Ok(threaded_web::auth::Auth::new(
-                client,
+                std::sync::Arc::new(clients),
                 auth_store,
                 &cookie_key,
                 true,
@@ -103,7 +112,7 @@ fn auth(store: &Store, addr: &str) -> Result<threaded_web::auth::Auth, BoxError>
         None => {
             let port = addr.rsplit(':').next().unwrap_or("8080");
             let callback = format!("http://127.0.0.1:{port}/oauth/callback");
-            let client = build(Mode::Localhost { callback }, auth_store.clone())?;
+            let clients = build(Mode::Localhost { callback }, auth_store.clone())?;
             let cookie_key = match env("THREADED_COOKIE_KEY") {
                 Some(p) => keys::load_cookie_key(std::path::Path::new(&p))?,
                 None => {
@@ -115,7 +124,7 @@ fn auth(store: &Store, addr: &str) -> Result<threaded_web::auth::Auth, BoxError>
             };
             tracing::info!("OAuth localhost development client; open http://127.0.0.1:{port}");
             Ok(threaded_web::auth::Auth::new(
-                client,
+                std::sync::Arc::new(clients),
                 auth_store,
                 &cookie_key,
                 false,
@@ -235,6 +244,7 @@ async fn seed(db: &str) -> Result<(), BoxError> {
                 user_is_author: false,
                 tags,
                 created_at: now - age,
+                record: None,
             })
             .await?;
     }
@@ -244,4 +254,51 @@ async fn seed(db: &str) -> Result<(), BoxError> {
         DEMO_STORIES.len()
     );
     Ok(())
+}
+
+async fn tag(db: &str, args: Vec<String>) -> Result<(), BoxError> {
+    let store = Store::open(db).await?;
+    match args.first().map(String::as_str) {
+        Some("list") => {
+            for t in store.all_tags().await? {
+                let state = if t.active { "" } else { " (inactive)" };
+                println!(
+                    "{:<14} {:>5} {}{state}",
+                    t.name, t.rank_boost, t.description
+                );
+            }
+            Ok(())
+        }
+        Some("add") => {
+            let name = args.get(1).ok_or("usage")?;
+            if !threaded_core::tag::valid_name(name) {
+                return Err(format!(
+                    "{name:?} is not a valid tag name: lowercase letters, digits, - _ +, up to 25"
+                )
+                .into());
+            }
+            let mut description = String::new();
+            let mut boost = 0.0;
+            let mut rest = args[2..].iter();
+            while let Some(flag) = rest.next() {
+                match flag.as_str() {
+                    "--description" => description = rest.next().ok_or("usage")?.clone(),
+                    "--boost" => {
+                        boost = rest
+                            .next()
+                            .and_then(|v| v.parse().ok())
+                            .ok_or("--boost needs a number, such as -0.5")?
+                    }
+                    _ => return Err("usage".into()),
+                }
+            }
+            if !(-10.0..=10.0).contains(&boost) {
+                return Err("--boost must be between -10 and 10".into());
+            }
+            store.upsert_tag(name, &description, boost).await?;
+            println!("{name}: {description} (rank boost {boost})");
+            Ok(())
+        }
+        _ => Err("usage".into()),
+    }
 }

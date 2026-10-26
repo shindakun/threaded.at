@@ -6,7 +6,7 @@ use jacquard_oauth::resolver::OAuthResolver;
 use jacquard_oauth::types::{AuthorizeOptions, CallbackParams};
 use smol_str::SmolStr;
 
-use crate::client::{has_atproto_scope, Client};
+use crate::client::{has_atproto_scope, Clients, Flow};
 use crate::hosts::{host_of, HostView};
 
 /// What the confirm page shows before the user leaves for their server.
@@ -47,8 +47,9 @@ pub fn normalize(input: &str) -> String {
     s.trim_start_matches('@').to_ascii_lowercase()
 }
 
-pub async fn resolve(client: &Client, input: &str) -> Result<Resolved, FlowError> {
-    let (server, doc) = client
+pub async fn resolve(clients: &Clients, input: &str) -> Result<Resolved, FlowError> {
+    let (server, doc) = clients
+        .base
         .oauth
         .client
         .resolve_oauth(input)
@@ -71,8 +72,9 @@ pub async fn resolve(client: &Client, input: &str) -> Result<Resolved, FlowError
 
 /// Makes the pushed authorization request and returns the URL to send the
 /// browser to.
-pub async fn start(client: &Client, input: &str) -> Result<String, FlowError> {
-    client
+pub async fn start(clients: &Clients, flow: Flow, input: &str) -> Result<String, FlowError> {
+    clients
+        .get(flow)
         .oauth
         .start_auth(input, AuthorizeOptions::default())
         .await
@@ -80,7 +82,8 @@ pub async fn start(client: &Client, input: &str) -> Result<String, FlowError> {
 }
 
 pub async fn finish(
-    client: &Client,
+    clients: &Clients,
+    flow: Flow,
     code: &str,
     state: Option<&str>,
     iss: Option<&str>,
@@ -90,6 +93,7 @@ pub async fn finish(
         state: state.map(SmolStr::new),
         iss: iss.map(SmolStr::new),
     };
+    let client = clients.get(flow);
     let session = client
         .oauth
         .callback(params)
@@ -118,7 +122,7 @@ pub async fn finish(
         return Err(FlowError::NoAtprotoScope);
     }
 
-    let verified_handle = verify_handle(client, &did).await;
+    let verified_handle = verify_handle(clients, &did).await;
     Ok(SignedIn {
         did: did.to_string(),
         session_id: session_id.to_string(),
@@ -127,8 +131,8 @@ pub async fn finish(
 }
 
 /// The DID document's first handle, if that handle resolves back to `did`.
-pub async fn verify_handle(client: &Client, did: &Did) -> Option<String> {
-    let resolver = client.oauth.client.as_ref();
+pub async fn verify_handle(clients: &Clients, did: &Did) -> Option<String> {
+    let resolver = clients.base.oauth.client.as_ref();
     let resp = resolver.resolve_did_doc(did).await.ok()?;
     let doc = resp.parse().ok()?;
     let handle = doc.handles().into_iter().next()?.to_string();
@@ -139,7 +143,8 @@ pub async fn verify_handle(client: &Client, did: &Did) -> Option<String> {
 
 /// Revokes the session at its server and deletes it here. A session that no
 /// longer restores is deleted locally.
-pub async fn sign_out(client: &Client, did: &str, session_id: &str) {
+pub async fn sign_out(clients: &Clients, flow: Flow, did: &str, session_id: &str) {
+    let client = clients.get(flow);
     let Ok(did) = Did::new(SmolStr::new(did)) else {
         return;
     };
@@ -158,6 +163,20 @@ pub async fn sign_out(client: &Client, did: &str, session_id: &str) {
                 .await;
         }
     }
+}
+
+/// The scopes granted to a stored session, or `None` when it no longer exists.
+pub async fn granted_scopes(clients: &Clients, did: &str, session_id: &str) -> Option<String> {
+    let did = Did::new(SmolStr::new(did)).ok()?;
+    let data = clients
+        .base
+        .oauth
+        .registry
+        .store
+        .get_session(&did, session_id)
+        .await
+        .ok()??;
+    Some(data.token_set.scope.as_deref().unwrap_or("").to_string())
 }
 
 #[cfg(test)]

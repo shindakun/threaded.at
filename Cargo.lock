@@ -274,6 +274,7 @@ dependencies = [
  "axum-core",
  "bytes",
  "cookie",
+ "form_urlencoded",
  "futures-core",
  "futures-util",
  "http",
@@ -281,6 +282,9 @@ dependencies = [
  "http-body-util",
  "mime",
  "pin-project-lite",
+ "serde_core",
+ "serde_html_form 0.2.8",
+ "serde_path_to_error",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -1988,7 +1992,7 @@ dependencies = [
  "rustversion",
  "serde",
  "serde_bytes",
- "serde_html_form",
+ "serde_html_form 0.3.2",
  "serde_ipld_dagcbor",
  "serde_json",
  "signature 3.0.0",
@@ -2016,7 +2020,7 @@ dependencies = [
  "n0-future",
  "reqwest",
  "serde",
- "serde_html_form",
+ "serde_html_form 0.3.2",
  "serde_json",
  "thiserror",
  "tokio",
@@ -2069,7 +2073,7 @@ dependencies = [
  "rand 0.8.8",
  "reqwest",
  "serde",
- "serde_html_form",
+ "serde_html_form 0.3.2",
  "serde_json",
  "sha2 0.10.9",
  "smallvec",
@@ -3404,6 +3408,19 @@ dependencies = [
 
 [[package]]
 name = "serde_html_form"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2f2d7ff8a2140333718bb329f5c40fc5f0865b84c426183ce14c97d2ab8154f"
+dependencies = [
+ "form_urlencoded",
+ "indexmap",
+ "itoa",
+ "ryu",
+ "serde_core",
+]
+
+[[package]]
+name = "serde_html_form"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2acf96b1d9364968fce46ebb548f1c0e1d7eceae27bdff73865d42e6c7369d94"
@@ -4064,12 +4081,14 @@ dependencies = [
  "p256",
  "rand 0.9.5",
  "reqwest",
+ "serde",
  "serde_json",
  "smol_str",
  "sqlx",
  "tempfile",
  "thiserror",
  "threaded-store",
+ "time",
  "tokio",
  "tracing",
  "url",
@@ -4109,6 +4128,7 @@ dependencies = [
  "serde",
  "serde-saphyr",
  "serde_json",
+ "serde_urlencoded",
  "sqlx",
  "tempfile",
  "threaded-auth",
@@ -4119,6 +4139,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

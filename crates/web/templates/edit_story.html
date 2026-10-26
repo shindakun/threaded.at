@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Edit story | {{ site }}{% endblock %}
+{% block main %}
+<h1>Edit story</h1>
+{% if let Some(e) = error %}<p class="form-error" role="alert">{{ e }}</p>{% endif %}
+<form method="post" action="/s/{{ short_id }}/edit" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <label for="title">Title</label>
+  <input id="title" name="title" type="text" value="{{ title }}" maxlength="150" required>
+  <label for="url">Link</label>
+  {% if url_locked %}
+  <input id="url" name="url" type="url" value="{{ url }}" readonly aria-describedby="url-hint">
+  <p class="hint" id="url-hint">The link is fixed one hour after posting.</p>
+  {% else %}
+  <input id="url" name="url" type="url" value="{{ url }}">
+  {% endif %}
+  <label for="text">Text</label>
+  <textarea id="text" name="text" rows="8">{{ text }}</textarea>
+  <fieldset class="tags-pick">
+    <legend>Tags: pick 1 to 5</legend>
+    {% for t in tags %}
+    <label><input type="checkbox" name="tags" value="{{ t.name }}"{% if t.checked %} checked{% endif %}> <span class="tag">{{ t.name }}</span> {{ t.description }}</label>
+    {% endfor %}
+  </fieldset>
+  <button type="submit" class="primary">Save</button>
+</form>
+<p><a href="/s/{{ short_id }}">Back to the story</a></p>
+{% endblock %}

@@ -1,14 +1,11 @@
 mod common;
 
-use std::sync::Arc;
-
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use threaded_core::link;
 use threaded_store::{NewStory, Store};
-use threaded_web::blog::Blog;
-use threaded_web::{router, AppState};
+use threaded_web::router;
 use tower::ServiceExt;
 
 const NOW: i64 = 1_790_000_000;
@@ -32,16 +29,17 @@ async fn app() -> (axum::Router, String) {
             body: "",
             user_is_author: false,
             tags: &["rust"],
+            record: None,
             created_at: NOW - 7200,
         })
         .await
         .unwrap();
-    let state = AppState {
-        auth: common::auth(&store),
-        store,
-        blog: Arc::new(Blog::new("/nonexistent/blog", std::time::Duration::ZERO)),
-        clock: Arc::new(|| NOW),
-    };
+    let state = common::state(
+        &store,
+        Default::default(),
+        NOW,
+        std::path::Path::new("/nonexistent/blog"),
+    );
     (router(state), id)
 }
 

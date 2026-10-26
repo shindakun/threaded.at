@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Settings | {{ site }}{% endblock %}
+{% block main %}
+<h1>Settings</h1>
+{% if let Some(n) = notice %}{% if n == "saved" %}<p class="notice" role="status">Saved.</p>{% else %}<p class="form-error" role="alert">Some records could not be changed on your server. Try again.</p>{% endif %}{% endif %}
+<h2>Public upvotes</h2>
+<p class="lead">Upvotes are private. Made public, each one is also an <code>at.threaded.vote</code> record in your repo, and your profile lists the stories you liked. Turning this off deletes those records; copies other apps already made are outside Threaded's reach.</p>
+{% if has_vote_scope || public_votes %}
+<form method="post" action="/settings" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <label class="check-line"><input type="checkbox" name="public_votes" value="1"{% if public_votes %} checked{% endif %}> Make my upvotes public</label>
+  {% if !public_votes %}<label class="check-line"><input type="checkbox" name="past" value="1"> Also publish my past upvotes</label>{% endif %}
+  <button type="submit" class="primary">Save</button>
+</form>
+{% else %}
+<p>Publishing upvotes needs permission to write vote records to your repo.</p>
+<form method="post" action="/login">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <input type="hidden" name="identifier" value="{{ did }}">
+  <input type="hidden" name="next" value="/settings">
+  <input type="hidden" name="flow" value="votes">
+  <button type="submit" class="primary">Grant permission</button>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Reply to {{ parent_handle }} | {{ site }}{% endblock %}
+{% block main %}
+<h1>Reply to {{ parent_handle }}</h1>
+<p>On <a href="/s/{{ story_id }}">{{ story_title }}</a></p>
+<blockquote class="prose">{{ parent_html|safe }}</blockquote>
+<form method="post" action="/comment" class="comment-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <input type="hidden" name="story" value="{{ story_id }}">
+  <input type="hidden" name="parent" value="{{ parent_id }}">
+  <label for="reply-text">Your reply</label>
+  <textarea id="reply-text" name="text" rows="6" required></textarea>
+  <button type="submit" class="primary">Post reply</button>
+</form>
+{% endblock %}

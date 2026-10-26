@@ -6,6 +6,9 @@ use sqlx::{QueryBuilder, Sqlite, SqlitePool};
 use threaded_core::rank::{self, RankInput};
 use threaded_core::search::{Query, Sort};
 
+mod m2;
+pub use m2::*;
+
 pub use sqlx::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -35,6 +38,7 @@ pub struct Filter {
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct StoryRow {
+    pub id: i64,
     pub short_id: String,
     pub title: String,
     pub url: Option<String>,
@@ -45,6 +49,15 @@ pub struct StoryRow {
     pub handle: String,
     /// Space-separated tag names, sorted.
     pub tags: String,
+    pub body: String,
+    pub user_id: i64,
+    pub author_did: String,
+    pub user_is_author: bool,
+    pub flags: i64,
+    pub edited_at: Option<i64>,
+    pub locked: bool,
+    pub at_uri: Option<String>,
+    pub at_cid: Option<String>,
 }
 
 impl StoryRow {
@@ -62,10 +75,14 @@ pub struct NewStory<'a> {
     pub user_is_author: bool,
     pub tags: &'a [&'a str],
     pub created_at: i64,
+    /// The record's AT-URI and CID, when the story was written to a repo.
+    pub record: Option<(&'a str, &'a str)>,
 }
 
-const STORY_COLUMNS: &str = "s.short_id, s.title, s.url, s.domain, s.score, s.comment_count, \
-     s.created_at, u.handle, \
+const STORY_COLUMNS: &str =
+    "s.id, s.short_id, s.title, s.url, s.domain, s.score, s.comment_count, \
+     s.created_at, u.handle, s.body, s.user_id, u.did AS author_did, s.user_is_author, s.flags, \
+     s.edited_at, s.locked, s.at_uri, s.at_cid, \
      coalesce((SELECT group_concat(name, ' ') FROM \
          (SELECT t.name FROM taggings tg JOIN tags t ON t.id = tg.tag_id \
           WHERE tg.story_id = s.id ORDER BY t.name)), '') AS tags";
@@ -194,8 +211,8 @@ impl Store {
 
         let story_id: i64 = sqlx::query_scalar(
             "INSERT INTO stories (short_id, user_id, title, url, canonical_url, domain, body, \
-             user_is_author, rank, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+             user_is_author, rank, created_at, at_uri, at_cid) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
         )
         .bind(&short_id)
         .bind(s.user_id)
@@ -207,6 +224,8 @@ impl Store {
         .bind(s.user_is_author)
         .bind(rank)
         .bind(s.created_at)
+        .bind(s.record.map(|r| r.0))
+        .bind(s.record.map(|r| r.1))
         .fetch_one(&mut *tx)
         .await?;
 
@@ -348,7 +367,7 @@ fn escape_like(s: &str) -> String {
         .replace('_', "\\_")
 }
 
-fn short_id() -> String {
+pub(crate) fn short_id() -> String {
     const ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
     let mut rng = rand::rng();
     (0..6)

@@ -108,6 +108,14 @@ pub fn level(a: &Account, t: &Thresholds) -> Level {
     }
 }
 
+/// Stories per day and comments per hour a level may post.
+pub fn limits(level: Level) -> (i64, i64) {
+    match level {
+        Level::New => (2, 6),
+        _ => (10, 30),
+    }
+}
+
 pub fn can(a: &Account, cap: Capability, t: &Thresholds) -> bool {
     use Capability::*;
     if a.banned {
@@ -194,6 +202,13 @@ mod tests {
         let t = Thresholds::default();
         assert!(!can(&acct(200, -5), Capability::Submit, &t));
         assert!(can(&acct(200, -4), Capability::Submit, &t));
+    }
+
+    #[test]
+    fn new_users_post_less() {
+        assert_eq!(limits(Level::New), (2, 6));
+        assert_eq!(limits(Level::Member), (10, 30));
+        assert_eq!(limits(Level::Admin), (10, 30));
     }
 
     #[test]
