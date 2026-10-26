@@ -800,7 +800,7 @@ Later migrations add `oauth_sessions`, `oauth_states`, `suggestions`,
 |---|---|---|
 | M0 Scaffold | Workspace, schema, ranking, levels, search parser, link canonicalization, read-only listings, search, tag and domain pages, blog, lexicon drafts, accessibility audit | Built |
 | M1 Sign-in | OAuth confidential client, metadata and JWKS endpoints, SQLite auth store, sessions, handle verification, sign-in form with handle lookahead, localhost dev flow | Built |
-| M2 Writing | Submit, comment, reply, upvote, flag, edit, delete; records to the PDS; re-consent for M1 sessions; public upvotes; profiles; Markdown; rate limits; levels enforced | |
+| M2 Writing | Submit, comment, reply, upvote, flag, edit, delete; records to the PDS; public upvotes; profiles; Markdown; rate limits; levels enforced | |
 | M3 Moderation | Mod log, moderator queue and item and user review, admin pages, actions, notes, bans, merges, role badges, suggestions, AI triage | |
 | M4 Indexer | hydrant beside Threaded, stream consumer with cursor, backfill, edits, deletes, account events, records and votes from other apps | |
 | M5 Reader features | Inbox, read ribbons, saved, hidden, filters, feeds, cross-post, labelers | |
