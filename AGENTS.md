@@ -77,6 +77,14 @@ Read these before changing anything:
   ignored.
 - Getting the details right is really important!
 
+### Identity
+
+- Identify an account by its DID and a record by its AT-URI, everywhere:
+  keys, lookups, links, forms, and logs.
+- A handle is for display only, and only once verified; until then show the
+  DID. A handle can pass to another account, so never act on one: a handle
+  may help find an account, then everything uses its DID.
+
 ### Records and namespaces
 
 - Production writes `at.threaded.*`; a local build (`THREADED_PUBLIC_URL`
