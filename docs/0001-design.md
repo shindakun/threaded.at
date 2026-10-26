@@ -543,8 +543,9 @@ user's items to the human queue without calling the model.
 **Accountability.** Each verdict stores the model ID, the rules version, and
 the moderator's final decision. `/moderations/stats` publishes how often
 moderators confirmed holds and agreed with suggestions. When confirmed holds
-fall below 95% of holds over the last 100, automatic holds switch off and every
-spam verdict becomes a suggestion.
+fall below 95% of holds over the last 100, once at least 20 are decided,
+automatic holds switch off and every spam verdict becomes a suggestion until
+an admin resets the breaker.
 
 ### 9.3 Moderator actions
 
@@ -752,6 +753,7 @@ threaded (binary)     CLI: serve, seed. Wires store, web, stream consumer, triag
 crates/core           Pure logic: ranking, levels, search parser, links, tags.
 crates/store          SQLite via sqlx. Migrations in migrations/.
 crates/web            axum router, askama templates, static CSS, blog loader.
+crates/triage         AI triage: the Messages API request, verdicts, the worker.
 lexicons/             at.threaded.* schemas.
 ```
 
@@ -813,7 +815,7 @@ Later migrations add `oauth_sessions`, `oauth_states`, `suggestions`,
 | M0 Scaffold | Workspace, schema, ranking, levels, search parser, link canonicalization, read-only listings, search, tag and domain pages, blog, lexicon drafts, accessibility audit | Built |
 | M1 Sign-in | OAuth confidential client, metadata and JWKS endpoints, SQLite auth store, sessions, handle verification, sign-in form with handle lookahead, localhost dev flow | Built |
 | M2 Writing | Submit, comment, reply, upvote, flag, edit, delete; records to the PDS; public upvotes; profiles; Markdown; rate limits; levels enforced | Built |
-| M3 Moderation | Mod log, moderator queue and item and user review, admin pages, actions, notes, bans, merges, role badges, suggestions, AI triage | |
+| M3 Moderation | Mod log, moderator queue and item and user review, admin pages, actions, notes, bans, merges, role badges, suggestions, AI triage | Built |
 | M4 Indexer | hydrant beside Threaded, stream consumer with cursor, backfill, edits, deletes, account events, records and votes from other apps, the Detached queue tab, hydrant lag on `/admin` | |
 | M5 Reader features | Inbox, read ribbons, saved, hidden, filters, feeds, cross-post, labelers | |
 | M6 Atmosphere | Project submissions, lexicon search, network stats | |

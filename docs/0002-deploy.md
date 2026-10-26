@@ -92,6 +92,7 @@ sudo chmod 0640 /etc/threaded/oauth-key.json /etc/threaded/cookie.key
 | `THREADED_PUBLIC_URL` | `https://threaded.at`; the OAuth client ID is `https://threaded.at/oauth-client-metadata.json` |
 | `THREADED_OAUTH_KEY` | `/etc/threaded/oauth-key.json` |
 | `THREADED_COOKIE_KEY` | `/etc/threaded/cookie.key` |
+| `THREADED_ANTHROPIC_KEY` | Unset, or `/etc/threaded/anthropic.key`; section 11 |
 | `RUST_LOG` | `info` |
 
 Back up both key files. Losing the OAuth key ends every session; losing the
@@ -196,7 +197,39 @@ t meta --description "About Threaded itself" --boost -0.5
 
 Running `tag add` again on a name updates it. `tag list` shows them all.
 
-## 11. Updating
+## 11. Moderation
+
+**The first admin.** Sign in on threaded.at once, then grant the role by DID.
+A handle can pass to someone else; a DID cannot. To find the DID for a handle:
+
+```sh
+curl -s "https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=steve.is.angstridden.net"
+sudo -u threaded env THREADED_DB=sqlite:/var/lib/threaded/threaded.db \
+  /opt/threaded/bin/threaded role grant did:plc:... admin
+```
+
+Further moderators and admins are granted on `/admin/people`.
+
+**Site rules.** Write them on `/admin/rules`. AI triage reads them as its
+instructions and stays off until a version exists.
+
+**AI triage, optional.** Without a key, nothing calls the model and moderation
+runs on flags and moderators. To turn it on, put the key in a file only the
+service can read, name it in `threaded.env`, and restart:
+
+```sh
+sudo install -o root -g threaded -m 0640 /dev/null /etc/threaded/anthropic.key
+sudo nano /etc/threaded/anthropic.key    # paste the key on one line
+echo 'THREADED_ANTHROPIC_KEY=/etc/threaded/anthropic.key' | sudo tee -a /etc/threaded/threaded.env
+sudo systemctl restart threaded
+sudo -u threaded sh -c 'set -a; . /etc/threaded/threaded.env; /opt/threaded/bin/threaded triage check'
+```
+
+`triage check` sends one test item and prints the verdict and token use; an
+error names what failed. `/admin` shows whether triage is on, its queue, and
+its error rate. Back up the key file with the others.
+
+## 12. Updating
 
 ```sh
 /opt/threaded/src/deploy/update.sh
@@ -206,10 +239,9 @@ It pulls, builds, takes a backup, installs the new binary, restarts the
 service, and checks `/healthz`. Migrations are forward-only, so the backup it
 takes is the way back from a bad release.
 
-## 12. Later milestones
+## 13. Later milestones
 
 | Milestone | Adds to the droplet |
 |---|---|
-| M3 Moderation | The Anthropic API key file, named by `THREADED_ANTHROPIC_KEY` in `threaded.env`; the first admin, `threaded role grant DID admin`; the site rules, saved on `/admin/rules` |
 | M4 Indexer | hydrant as a second systemd service on a Unix socket in `/run/hydrant/`, with its database in `/var/lib/hydrant` |
 | Lexicons | A `_lexicon.threaded.at` TXT record naming the publishing DID |

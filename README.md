@@ -20,8 +20,8 @@ records in the author's own repo.
 
 M0 is built: the schema, ranking, levels, search, link canonicalization,
 read-only listings, the blog, the lexicon drafts, and an accessibility audit
-that every page passes. M1, sign-in, and M2, writing, are built. Moderation is
-M3. The milestone table is in the design doc, section 16.
+that every page passes. M1, sign-in, M2, writing, and M3, moderation, are
+built. The indexer is M4. The milestone table is in the design doc, section 16.
 
 ## Quick start
 
@@ -48,6 +48,7 @@ needs `pre-commit`.
 | `THREADED_PUBLIC_URL` | unset: the localhost development OAuth client |
 | `THREADED_OAUTH_KEY` | required with `THREADED_PUBLIC_URL` |
 | `THREADED_COOKIE_KEY` | required with `THREADED_PUBLIC_URL`; unset in development means sessions end on restart |
+| `THREADED_ANTHROPIC_KEY` | a file holding an Anthropic API key; unset turns AI triage off |
 | `RUST_LOG` | `info` |
 
 ## Signing in locally
@@ -75,6 +76,19 @@ threaded tag list
 
 `tag add` on an existing tag updates it. `--boost` is the tag's rank boost,
 from -10 to 10. Both commands use `THREADED_DB`.
+
+## Moderation
+
+```sh
+threaded role grant did:plc:... admin    # or moderator; the account signs in once first
+threaded role revoke did:plc:...
+threaded triage check                     # one test item through the triage model
+```
+
+Roles take a DID, never a handle: a handle can pass to someone else. Admins
+then work from `/admin`: tags, people, settings, and the site rules that AI
+triage reads. AI triage runs only with `THREADED_ANTHROPIC_KEY` set and a
+rules version saved; without either, moderation runs on flags and moderators.
 
 ## Blog
 
@@ -109,7 +123,13 @@ section 12. A file that fails to parse is skipped and the reason is logged.
 | `/submit` | Submit a story |
 | `/comment`, `/vote`, `/flag` | Form targets for comments, upvotes, and flags |
 | `/u/{handle}` | A user's stories, comments, and public upvotes |
-| `/settings` | Public upvotes |
+| `/settings` | Public upvotes; keeping your posts out of AI triage |
+| `/s/{short_id}/suggest` | Suggest a story's title and tags |
+| `/mod` | Moderation queue: Holds, Flagged, Suggestions, Edits |
+| `/mod/s/{short_id}`, `/mod/c/{short_id}`, `/mod/u/{handle}` | Review a story, comment, or user, and act on it |
+| `/moderations` | The public moderation log |
+| `/moderations/stats` | How often moderators agreed with AI triage |
+| `/admin`, `/admin/rules`, `/admin/tags`, `/admin/people`, `/admin/settings` | Health, site rules, tags, roles, and settings |
 | `/search?q=` | Search; syntax in the design doc, section 7 |
 | `/tags` | Tag list |
 | `/blog` | Blog index, newest first; `?page=2` and on |
@@ -121,10 +141,11 @@ section 12. A file that fails to parse is skipped and the reason is logged.
 ## Layout
 
 ```text
-src/main.rs        CLI: serve, seed, keygen, tag
+src/main.rs        CLI: serve, seed, keygen, tag, role, triage check
 crates/core/       ranking, levels, search parser, links, tags
 crates/auth/       atproto OAuth: keys, SQLite session store, sign-in flow, record writes
 crates/store/      SQLite via sqlx; migrations/ at the repo root
+crates/triage/     AI triage: the model request, verdicts, the worker
 crates/web/        axum router, askama templates, CSS
 migrations/        forward-only SQL migrations
 lexicons/          at.threaded.* lexicon schemas
