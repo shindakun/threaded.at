@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Rules | Admin | {{ site }}{% endblock %}
+{% block main %}
+<h1>Site rules</h1>
+{% let admin_tab = "rules" %}{% include "admin_tabs.html" %}
+{% if done %}<p class="notice" role="status">Saved. The new version takes effect at once.</p>{% endif %}
+<p class="lead">Triage reads these rules for every item. It stays off until a version exists. Each verdict records the version it read.</p>
+<form method="post" action="/admin/rules" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <label for="rules-body">Rules</label>
+  <textarea id="rules-body" name="body" rows="16" required>{{ current }}</textarea>
+  <label for="rules-reason">Reason</label>
+  <input id="rules-reason" name="reason" type="text" required>
+  <button type="submit" class="primary">Save a new version</button>
+</form>
+<h2>History</h2>
+{% if history.is_empty() %}<p class="empty">No versions yet.</p>{% else %}
+<ol class="plain">{% for r in history %}<li><details><summary>Version {{ r.id }}, {{ r.author }}, {{ r.age }}</summary><pre class="revision">{{ r.body }}</pre></details></li>{% endfor %}</ol>
+{% endif %}
+{% endblock %}

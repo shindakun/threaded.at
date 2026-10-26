@@ -28,7 +28,8 @@ pub fn state(
         writer: Writer::Memory(repo),
         clock: Arc::new(move || now),
         policy: Default::default(),
-        triage: false,
+        triage_key: false,
+        rules_ready: Default::default(),
     }
 }
 

@@ -4061,6 +4061,7 @@ dependencies = [
  "threaded-auth",
  "threaded-core",
  "threaded-store",
+ "threaded-triage",
  "threaded-web",
  "tokio",
  "tracing",
@@ -4114,6 +4115,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "threaded-triage"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "threaded-core",
+ "threaded-store",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "threaded-web"
 version = "0.1.0"
 dependencies = [
@@ -4135,6 +4150,7 @@ dependencies = [
  "threaded-auth",
  "threaded-core",
  "threaded-store",
+ "threaded-triage",
  "time",
  "tokio",
  "tower",

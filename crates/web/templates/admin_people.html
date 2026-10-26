@@ -2,12 +2,7 @@
 {% block title %}People | Admin | {{ site }}{% endblock %}
 {% block main %}
 <h1>People</h1>
-<nav class="tabs" aria-label="Admin">
-  <a href="/admin">Health</a>
-  <a href="/admin/tags">Tags</a>
-  <a href="/admin/people" aria-current="page">People</a>
-  <a href="/admin/settings">Settings</a>
-</nav>
+{% let admin_tab = "people" %}{% include "admin_tabs.html" %}
 {% if done %}<p class="notice" role="status">Saved. The change is in the moderation log.</p>{% endif %}
 <h2>Moderators and admins</h2>
 <ul class="plain">

@@ -82,6 +82,8 @@ a { color: inherit; }
 
 main { max-width: 900px; margin: 0 auto; padding: 16px 20px 48px; }
 h1 { font-size: 18px; margin: 4px 0 14px; }
+h2 { font-size: 16px; margin: 22px 0 8px; }
+h3 { font-size: 15px; }
 
 .stories { list-style: none; margin: 0; padding: 0; }
 .story { display: flex; gap: 12px; padding: 7px 0; }
@@ -354,3 +356,5 @@ a.badge:hover { border-color: var(--accent); }
 .facts dd { margin: 0; }
 .inline-form { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: 8px; }
 .inline-form input[type="text"] { font: inherit; padding: 4px 8px; border: 1px solid var(--field); border-radius: 6px; background: var(--panel); color: var(--ink); }
+.verdict { margin: 6px 0; padding: 6px 10px; border-left: 3px solid var(--field); background: var(--panel); max-width: 70ch; }
+.verdict p { margin: 2px 0; }

@@ -5,7 +5,7 @@
 //! usage: a11y_fixture DB_URL COOKIE_KEY_FILE
 
 use threaded_auth::client::{scopes, Flow, Namespace};
-use threaded_store::{By, NewComment, NewStory, Store, Target, VoteChange};
+use threaded_store::{By, NewComment, NewStory, NewVerdict, Store, Target, VoteChange};
 
 const DAY: i64 = 86_400;
 
@@ -179,6 +179,59 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     store
         .suggest(story_id, flagger, Some("A clearer title"), None, now)
         .await?;
+    // Site rules, a story triage held, and a triage suggestion.
+    store
+        .save_rules(
+            "No spam: no promotional links without discussion.",
+            By::Moderator(me),
+            "First rules",
+            now,
+        )
+        .await?
+        .map_err(|e| e.to_string())?;
+    let link3 = threaded_core::link::parse("https://shop.example/a11y-held")?;
+    let held = store
+        .insert_story(&NewStory {
+            user_id: other,
+            title: "A held story",
+            link: Some(&link3),
+            body: "",
+            user_is_author: false,
+            tags: &["rust"],
+            created_at: now - 100,
+            record: None,
+        })
+        .await?;
+    let held_id = store.story(&held).await?.ok_or("story missing")?.id;
+    let theirs_id = store.story(&theirs).await?.ok_or("story missing")?.id;
+    for (id, verdict, confidence, hold) in [
+        (held_id, "spam", "high", true),
+        (theirs_id, "off-topic", "medium", false),
+    ] {
+        sqlx::query("INSERT INTO triage_queue (story_id, created_at) VALUES (?, ?)")
+            .bind(id)
+            .bind(now)
+            .execute(store.pool())
+            .await?;
+        let q = store.triage_next().await?.ok_or("queue empty")?;
+        store
+            .record_verdict(
+                q.id,
+                Target::Story(id),
+                &NewVerdict {
+                    verdict,
+                    rule: "No spam",
+                    confidence,
+                    explanation: "A fixture verdict.",
+                    model: "claude-opus-5-5",
+                    rules_version_id: Some(1),
+                    error: None,
+                },
+                hold,
+                now,
+            )
+            .await?;
+    }
     sqlx::query("UPDATE users SET karma = 50 WHERE id = ?")
         .bind(me)
         .execute(store.pool())

@@ -1,0 +1,7 @@
+<nav class="tabs" aria-label="Admin">
+  <a href="/admin"{% if admin_tab == "health" %} aria-current="page"{% endif %}>Health</a>
+  <a href="/admin/rules"{% if admin_tab == "rules" %} aria-current="page"{% endif %}>Rules</a>
+  <a href="/admin/tags"{% if admin_tab == "tags" %} aria-current="page"{% endif %}>Tags</a>
+  <a href="/admin/people"{% if admin_tab == "people" %} aria-current="page"{% endif %}>People</a>
+  <a href="/admin/settings"{% if admin_tab == "settings" %} aria-current="page"{% endif %}>Settings</a>
+</nav>

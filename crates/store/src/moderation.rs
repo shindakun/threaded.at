@@ -230,7 +230,7 @@ fn reason_ok(reason: &str) -> Outcome {
 
 /// Recounts a story's score, flags, and visible comments from the rows, then
 /// its rank and its author's karma.
-async fn recount_story(tx: &mut Transaction<'_, Sqlite>, story_id: i64) -> Result<()> {
+pub(crate) async fn recount(tx: &mut Transaction<'_, Sqlite>, story_id: i64) -> Result<()> {
     sqlx::query(
         "UPDATE stories SET \
          score = 1 + (SELECT coalesce(sum(value), 0) FROM votes WHERE story_id = ?1), \
@@ -351,7 +351,7 @@ impl Store {
                 "It is not removed."
             })));
         }
-        recount_story(&mut tx, story_id).await?;
+        recount(&mut tx, story_id).await?;
         let (s, c) = target_ids(target);
         let kind = if c.is_some() { "comment" } else { "story" };
         let action = format!("{} {kind}", if removed { "remove" } else { "restore" });
@@ -552,8 +552,8 @@ impl Store {
             .bind(from)
             .execute(&mut *tx)
             .await?;
-        recount_story(&mut tx, into).await?;
-        recount_story(&mut tx, from).await?;
+        recount(&mut tx, into).await?;
+        recount(&mut tx, from).await?;
         let target: String = sqlx::query_scalar("SELECT short_id FROM stories WHERE id = ?")
             .bind(into)
             .fetch_one(&mut *tx)
@@ -607,8 +607,8 @@ impl Store {
             .bind(from)
             .execute(&mut *tx)
             .await?;
-        recount_story(&mut tx, into).await?;
-        recount_story(&mut tx, from).await?;
+        recount(&mut tx, into).await?;
+        recount(&mut tx, from).await?;
         log(
             &mut tx,
             by,

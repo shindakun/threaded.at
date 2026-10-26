@@ -1,5 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Settings | {{ site }}{% endblock %}
+{% block title %}Settings | {{ site }}<h2>AI triage</h2>
+<p class="lead">New posts may be read by an AI model that checks them against the site rules and flags likely spam for a moderator. It never decides alone: a moderator confirms or releases every hold. You can keep your posts out of it; a moderator reviews them instead.</p>
+<form method="post" action="/settings/triage" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <label class="check-line"><input type="checkbox" name="opt_out" value="1"{% if triage_opt_out %} checked{% endif %}> Keep my posts out of AI triage</label>
+  <button type="submit" class="primary">Save</button>
+</form>
+{% endblock %}
 {% block main %}
 <h1>Settings</h1>
 {% if let Some(n) = notice %}{% if n == "saved" %}<p class="notice" role="status">Saved.</p>{% else %}<p class="form-error" role="alert">Some records could not be changed on your server. Try again.</p>{% endif %}{% endif %}
@@ -22,4 +29,11 @@
   <button type="submit" class="primary">Grant permission</button>
 </form>
 {% endif %}
+<h2>AI triage</h2>
+<p class="lead">New posts may be read by an AI model that checks them against the site rules and flags likely spam for a moderator. It never decides alone: a moderator confirms or releases every hold. You can keep your posts out of it; a moderator reviews them instead.</p>
+<form method="post" action="/settings/triage" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <label class="check-line"><input type="checkbox" name="opt_out" value="1"{% if triage_opt_out %} checked{% endif %}> Keep my posts out of AI triage</label>
+  <button type="submit" class="primary">Save</button>
+</form>
 {% endblock %}

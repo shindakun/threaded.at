@@ -2,14 +2,31 @@
 {% block title %}Admin | {{ site }}{% endblock %}
 {% block main %}
 <h1>Admin</h1>
-<nav class="tabs" aria-label="Admin">
-  <a href="/admin" aria-current="page">Health</a>
-  <a href="/admin/tags">Tags</a>
-  <a href="/admin/people">People</a>
-  <a href="/admin/settings">Settings</a>
-</nav>
+{% let admin_tab = "health" %}{% include "admin_tabs.html" %}
+{% if done %}<p class="notice" role="status">Done. The action is in the moderation log.</p>{% endif %}
+<h2>AI triage</h2>
 <dl class="facts">
-  <dt>AI triage</dt><dd>{{ triage }}</dd>
+  <dt>State</dt><dd>{{ triage }}</dd>
+  {% if key %}
+  <dt>Queue depth</dt><dd>{{ stats.queue_depth }}</dd>
+  <dt>Verdicts, last day</dt><dd>{{ stats.verdicts_last_day }}, of which {{ stats.errors_last_day }} without a model verdict</dd>
+  <dt>Hold precision</dt><dd>{% if let Some(p) = precision %}{{ p }} confirmed of {{ stats.holds_decided }} decided holds{% else %}no decided holds yet{% endif %}; holds stop below {{ floor }}</dd>
+  <dt>Automatic holds</dt><dd>{% if breaker_open %}Off: moderators released too many holds. Every spam verdict is a suggestion until reset.{% else %}On{% endif %}</dd>
+  {% endif %}
+</dl>
+{% if breaker_open %}
+<form method="post" action="/admin/breaker" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <p class="hint">Resetting counts only holds decided from now on.</p>
+  <label for="breaker-reason">Reason</label>
+  <input id="breaker-reason" name="reason" type="text" required>
+  <button type="submit" class="secondary">Turn automatic holds back on</button>
+</form>
+{% endif %}
+<h2>Queue</h2>
+<dl class="facts">
+  <dt>Holds</dt><dd><a href="/mod?tab=holds">{{ holds }}</a></dd>
   <dt>Flagged items</dt><dd><a href="/mod?tab=flagged">{{ flagged }}</a></dd>
+  <dt>Triage suggestions</dt><dd><a href="/mod?tab=suggestions">{{ suggestions }}</a></dd>
 </dl>
 {% endblock %}

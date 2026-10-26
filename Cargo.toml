@@ -20,6 +20,7 @@ axum = "0.8.9"
 threaded-auth = { version = "0.1.0", path = "crates/auth" }
 threaded-core = { version = "0.1.0", path = "crates/core" }
 threaded-store = { version = "0.1.0", path = "crates/store" }
+threaded-triage = { version = "0.1.0", path = "crates/triage" }
 threaded-web = { version = "0.1.0", path = "crates/web" }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
 tracing = "0.1.44"

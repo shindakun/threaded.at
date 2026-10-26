@@ -68,8 +68,10 @@ curl -fs -H "Cookie: $cookie" "$base/settings" | grep -q 'href="/u/a11y.example"
 # The same for staff pages: a 403 page would pass the audit too.
 curl -fs -H "Cookie: $cookie" "$base/admin" >/dev/null || { echo "fixture user cannot open /admin"; exit 1; }
 curl -fs -H "Cookie: $cookie" "$base/mod" | grep -q 'class="queue-row"' || { echo "the moderation queue is empty or closed"; exit 1; }
-curl -fs -H "Cookie: $cookie" "$base/mod?tab=edits" | grep -q 'class="queue-row"' || { echo "the Edits tab is empty"; exit 1; }
+for tab in edits holds suggestions; do
+  curl -fs -H "Cookie: $cookie" "$base/mod?tab=$tab" | grep -q 'class="queue-row"' || { echo "the $tab tab is empty"; exit 1; }
+done
 curl -fs -H "Cookie: $cookie" "$base/s/$theirs/suggest" >/dev/null || { echo "the suggest page refused the fixture user"; exit 1; }
 A11Y_COOKIE="$cookie" node "$here/audit.mjs" "$base" / "$mine" "$mine/edit" /submit "/c/$comment/reply" "/c/$comment/edit" /settings /u/a11y.example /u/other.example \
   /mod "/mod/s/$sid" /mod/c/"$comment" /mod/u/other.example /moderations /admin /admin/settings /admin/tags /admin/people \
-  "/mod?tab=edits" "/s/$theirs/suggest"
+  "/mod?tab=edits" "/s/$theirs/suggest" "/mod?tab=holds" "/mod?tab=suggestions" /admin/rules /moderations/stats

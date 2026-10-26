@@ -6,7 +6,31 @@
   {% for t in tabs %}<a href="/mod?tab={{ t.key }}"{% if t.key == tab %} aria-current="page"{% endif %}>{{ t.label }} <span class="count">{{ t.count }}</span></a>{% endfor %}
 </nav>
 {% if done %}<p class="notice" role="status">Done. The action is in the moderation log.</p>{% endif %}
-{% if tab == "edits" %}
+{% if tab == "holds" || tab == "suggestions" %}
+{% if triaged.is_empty() %}<p class="empty">{% if tab == "holds" %}No held items.{% else %}No triage suggestions.{% endif %}</p>{% else %}
+<ol class="queue">
+{% for (r, v) in triaged %}
+<li><article class="queue-row" aria-labelledby="t-{{ v.id }}">
+  <h2 id="t-{{ v.id }}"><a href="{{ r.item_href() }}">{% if r.kind == "comment" %}Comment on {% endif %}{{ r.title }}</a></h2>
+  {% if !r.excerpt.is_empty() %}<p class="excerpt">{{ r.excerpt }}</p>{% endif %}
+  <p class="meta">by <a href="/mod/u/{{ r.author }}">{{ r.author }}</a>, karma {{ r.author_karma }}, here {{ r.tenure }} | {{ r.age }}</p>
+  {% include "verdict.html" %}
+  {% for (d, label) in v.choices() %}
+  <form method="post" action="/mod/verdicts/{{ v.id }}" class="inline-form">
+    <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+    <input type="hidden" name="decision" value="{{ d }}">
+    <input type="hidden" name="tab" value="{{ tab }}">
+    <label for="t-{{ v.id }}-{{ d }}">Reason</label>
+    <input id="t-{{ v.id }}-{{ d }}" name="reason" type="text" required>
+    <button type="submit" class="secondary">{{ label }}</button>
+  </form>
+  {% endfor %}
+  <p><a href="{{ r.review_href() }}">Review</a></p>
+</article></li>
+{% endfor %}
+</ol>
+{% endif %}
+{% else if tab == "edits" %}
 {% if edits.is_empty() %}<p class="empty">No suggested edits.</p>{% else %}
 <ol class="queue">
 {% for e in edits %}

@@ -4,7 +4,7 @@ use threaded_core::rank::{self, RankInput};
 
 use crate::{short_id, Result, Store, StoryRow, STORY_COLUMNS, VISIBLE};
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
 pub struct UserRow {
     pub id: i64,
     pub did: String,

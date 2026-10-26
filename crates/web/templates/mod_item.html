@@ -15,6 +15,9 @@
   {% if !body_html.is_empty() %}<div class="prose">{{ body_html|safe }}</div>{% endif %}
 </article>
 
+<h2>Triage</h2>
+{% if let Some(v) = verdict %}{% include "verdict.html" %}{% else %}<p class="empty">Not triaged.</p>{% endif %}
+
 <h2>Flags</h2>
 {% if flags.is_empty() %}<p class="empty">No flags.</p>{% else %}
 <ul class="plain">{% for f in flags %}<li>{{ f.reason }} by <a href="/mod/u/{{ f.handle }}">{{ f.handle }}</a>, {{ f.age }}</li>{% endfor %}</ul>

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Moderation statistics | {{ site }}{% endblock %}
+{% block main %}
+<h1>Moderation statistics</h1>
+<p class="lead">How often moderators agreed with AI triage. Triage never bans, merges, or edits; a moderator decides every hold.</p>
+<dl class="facts">
+  <dt>Holds confirmed</dt><dd>{% if let Some(r) = holds_rate %}{{ r }} of the last {{ stats.holds_decided }} decided holds{% else %}no decided holds yet{% endif %}</dd>
+  <dt>Suggestions acted on</dt><dd>{% if let Some(a) = agreement %}{{ a }} of {{ stats.suggestions_decided }} decided suggestions{% else %}no decided suggestions yet{% endif %}</dd>
+</dl>
+<p><a href="/moderations">The moderation log</a></p>
+{% endblock %}

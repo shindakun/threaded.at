@@ -1362,6 +1362,7 @@ struct SettingsPage {
     nav: &'static str,
     public_votes: bool,
     has_vote_scope: bool,
+    triage_opt_out: bool,
     did: String,
     notice: Option<String>,
 }
@@ -1391,11 +1392,33 @@ pub async fn settings_page(
             nav: "",
             public_votes: a.user.public_votes,
             has_vote_scope,
+            triage_opt_out: st.store.triage_opt_out(a.user.id).await?,
             did: a.user.did.clone(),
             notice: q.notice,
         }
         .render()?,
     ))
+}
+
+#[derive(Deserialize)]
+pub struct TriageForm {
+    csrf: String,
+    #[serde(default)]
+    opt_out: Option<String>,
+}
+
+/// "Keep my posts out of AI triage": the posts go to a moderator instead.
+pub async fn settings_triage(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    Form(f): Form<TriageForm>,
+) -> Result<Response, AppError> {
+    check_csrf(&viewer, &f.csrf)?;
+    let a = actor(&st, &viewer, "/settings").await?;
+    st.store
+        .set_triage_opt_out(a.user.id, f.opt_out.is_some())
+        .await?;
+    Ok(Redirect::to("/settings?notice=saved").into_response())
 }
 
 #[derive(Deserialize)]

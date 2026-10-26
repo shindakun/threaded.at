@@ -31,6 +31,19 @@ pub struct Res {
 }
 
 pub async fn world_at(now: i64, store: Option<(Store, Arc<MemoryRepo>)>) -> World {
+    world_with(now, store, false).await
+}
+
+/// A world with an Anthropic key configured, so triage turns on once rules exist.
+pub async fn world_with_triage() -> World {
+    world_with(NOW, None, true).await
+}
+
+pub async fn world_with(
+    now: i64,
+    store: Option<(Store, Arc<MemoryRepo>)>,
+    triage_key: bool,
+) -> World {
     let _ = tracing_subscriber::fmt().with_test_writer().try_init();
     let (store, repo) = match store {
         Some(s) => s,
@@ -47,12 +60,9 @@ pub async fn world_at(now: i64, store: Option<(Store, Arc<MemoryRepo>)>) -> Worl
             (store, Arc::new(MemoryRepo::default()))
         }
     };
-    let app = router(super::state(
-        &store,
-        repo.clone(),
-        now,
-        Path::new("/nonexistent/blog"),
-    ));
+    let mut state = super::state(&store, repo.clone(), now, Path::new("/nonexistent/blog"));
+    state.triage_key = triage_key;
+    let app = router(state);
     let r = app
         .clone()
         .oneshot(Request::get("/login").body(Body::empty()).unwrap())

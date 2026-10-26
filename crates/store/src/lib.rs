@@ -9,9 +9,11 @@ use threaded_core::search::{Query, Sort};
 mod accept;
 mod m2;
 mod moderation;
+mod triage;
 pub use accept::*;
 pub use m2::*;
 pub use moderation::*;
+pub use triage::*;
 
 pub use sqlx::Error;
 

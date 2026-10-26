@@ -156,6 +156,46 @@ pub struct Tab {
     pub count: usize,
 }
 
+/// A triage verdict as moderators see it.
+pub struct VerdictView {
+    pub id: i64,
+    pub verdict: String,
+    pub rule: String,
+    pub confidence: String,
+    pub explanation: String,
+    pub model: String,
+    pub rules_version: Option<i64>,
+    pub error: Option<String>,
+    pub held: bool,
+    pub decision: Option<String>,
+}
+
+impl VerdictView {
+    /// The decisions that fit this verdict, with their button labels.
+    pub fn choices(&self) -> [(&'static str, &'static str); 2] {
+        if self.held {
+            [("confirmed", "Confirm hold"), ("released", "Release")]
+        } else {
+            [("removed", "Remove"), ("dismissed", "Dismiss")]
+        }
+    }
+
+    fn from(v: threaded_store::VerdictRow) -> VerdictView {
+        VerdictView {
+            id: v.id,
+            verdict: v.verdict,
+            rule: v.rule,
+            confidence: v.confidence,
+            explanation: v.explanation,
+            model: v.model,
+            rules_version: v.rules_version_id,
+            error: v.error,
+            held: v.held,
+            decision: v.decision,
+        }
+    }
+}
+
 /// A suggested edit as the Edits tab shows it.
 pub struct EditRow {
     pub id: i64,
@@ -178,6 +218,7 @@ struct ModPage {
     tabs: Vec<Tab>,
     tab: &'static str,
     rows: Vec<QueueRow>,
+    triaged: Vec<(QueueRow, VerdictView)>,
     edits: Vec<EditRow>,
 }
 
@@ -190,11 +231,23 @@ pub async fn mod_queue(
     let now = (st.clock)();
     let flagged = st.store.flagged(st.policy().flags_to_queue).await?;
     let suggestions = st.store.open_suggestions().await?;
+    let holds = st.store.holds().await?;
+    let triage_suggestions = st.store.triage_suggestions().await?;
     let tabs = vec![
+        Tab {
+            key: "holds",
+            label: "Holds",
+            count: holds.len(),
+        },
         Tab {
             key: "flagged",
             label: "Flagged",
             count: flagged.len(),
+        },
+        Tab {
+            key: "suggestions",
+            label: "Suggestions",
+            count: triage_suggestions.len(),
         },
         Tab {
             key: "edits",
@@ -202,14 +255,30 @@ pub async fn mod_queue(
             count: suggestions.len(),
         },
     ];
+    // With nothing given, open the first tab with work in it.
     let tab = tabs
         .iter()
         .find(|t| Some(t.key) == q.tab.as_deref())
-        .unwrap_or(&tabs[0])
+        .or_else(|| tabs.iter().find(|t| t.count > 0))
+        .unwrap_or(&tabs[1])
         .key;
     let mut rows = Vec::new();
     let mut edits = Vec::new();
+    let mut triaged = Vec::new();
     match tab {
+        "holds" | "suggestions" => {
+            let list = if tab == "holds" {
+                holds
+            } else {
+                triage_suggestions
+            };
+            for t in list {
+                triaged.push((
+                    queue_row(&st, t.item, now).await?,
+                    VerdictView::from(t.verdict),
+                ));
+            }
+        }
         "edits" => {
             edits = suggestions
                 .into_iter()
@@ -240,6 +309,7 @@ pub async fn mod_queue(
             tabs,
             tab,
             rows,
+            triaged,
             edits,
         }
         .render()?,
@@ -274,6 +344,46 @@ pub async fn decide_suggestion(
     match r {
         Ok(()) => Ok(Redirect::to("/mod?tab=edits&done=1").into_response()),
         Err(e) => outcome(Err(e), "/mod?tab=edits"),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct VerdictForm {
+    csrf: String,
+    decision: String,
+    #[serde(default)]
+    reason: String,
+    #[serde(default)]
+    tab: String,
+}
+
+pub async fn decide_verdict(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    Path(id): Path<i64>,
+    axum::Form(f): axum::Form<VerdictForm>,
+) -> Result<Response, AppError> {
+    check_csrf(&viewer, &f.csrf)?;
+    let tab = if f.tab == "holds" {
+        "holds"
+    } else {
+        "suggestions"
+    };
+    let back = format!("/mod?tab={tab}");
+    let me = staff(&st, &viewer, Need::Moderator, &back).await?;
+    if !matches!(
+        f.decision.as_str(),
+        "confirmed" | "released" | "removed" | "dismissed"
+    ) {
+        return Err(AppError::NotFound);
+    }
+    let r = st
+        .store
+        .decide_verdict(id, &f.decision, me.by(), &f.reason, (st.clock)())
+        .await?;
+    match r {
+        Ok(()) => Ok(Redirect::to(&format!("{back}&done=1")).into_response()),
+        Err(e) => outcome(Err(e), &back),
     }
 }
 
@@ -353,6 +463,7 @@ struct ItemPage {
     tags: Vec<TagPick>,
     flags: Vec<FlagView>,
     revisions: Vec<RevisionView>,
+    verdict: Option<VerdictView>,
     log: Vec<LogView>,
 }
 
@@ -403,6 +514,7 @@ async fn item_page(
         .into_iter()
         .map(|r| log_view(r, now))
         .collect();
+    let verdict = st.store.verdict_for(target).await?.map(VerdictView::from);
     let body_html = markdown::user(&q.body);
     let url = q.url.clone();
     let (kind, removed, held, locked, merged_into, mod_edited, tags) = match target {
@@ -474,6 +586,7 @@ async fn item_page(
             tags,
             flags,
             revisions,
+            verdict,
             log,
         }
         .render()?,
@@ -858,6 +971,33 @@ pub async fn moderations(
             rows: rows.into_iter().map(|r| log_view(r, now)).collect(),
             page,
             more,
+        }
+        .render()?,
+    ))
+}
+
+#[derive(Template)]
+#[template(path = "moderation_stats.html")]
+struct StatsPage {
+    site: &'static str,
+    viewer: Viewer,
+    nav: &'static str,
+    stats: threaded_store::TriageStats,
+    holds_rate: Option<String>,
+    agreement: Option<String>,
+}
+
+pub async fn moderation_stats(State(st): State<AppState>, viewer: Viewer) -> Page {
+    let stats = st.store.triage_stats((st.clock)()).await?;
+    let pct = |n: i64, d: i64| (d > 0).then(|| format!("{:.0}%", n as f64 * 100.0 / d as f64));
+    Ok(Html(
+        StatsPage {
+            site: SITE_NAME,
+            viewer,
+            nav: "",
+            holds_rate: pct(stats.holds_confirmed, stats.holds_decided),
+            agreement: pct(stats.suggestions_agreed, stats.suggestions_decided),
+            stats,
         }
         .render()?,
     ))

@@ -7,7 +7,7 @@ use axum_extra::extract::Form as HtmlForm;
 use serde::Deserialize;
 use std::collections::HashMap;
 use threaded_core::policy::SETTINGS;
-use threaded_store::{ModError, RoleChange, RoleName, TagFields, TagRow};
+use threaded_store::{ModError, RoleChange, RoleName, TagFields, TagRow, TriageStats};
 
 use crate::auth::{check_csrf, Viewer};
 use crate::staff::{outcome, staff, DoneQuery, Need};
@@ -21,27 +21,147 @@ struct HomePage {
     site: &'static str,
     viewer: Viewer,
     nav: &'static str,
+    done: bool,
     triage: &'static str,
+    key: bool,
     flagged: usize,
+    holds: usize,
+    suggestions: usize,
+    stats: TriageStats,
+    precision: Option<String>,
+    floor: String,
+    breaker_open: bool,
 }
 
-pub async fn home(State(st): State<AppState>, viewer: Viewer) -> Page {
+pub async fn home(State(st): State<AppState>, viewer: Viewer, Query(q): Query<DoneQuery>) -> Page {
     staff(&st, &viewer, Need::Admin, "/admin").await?;
-    let flagged = st.store.flagged(st.policy().flags_to_queue).await?.len();
+    let policy = st.policy();
+    let flagged = st.store.flagged(policy.flags_to_queue).await?.len();
+    let stats = st.store.triage_stats((st.clock)()).await?;
+    let triage = match (st.triage_key, st.triage_on()) {
+        (false, _) => "Off: no API key is configured. Moderation runs on flags and moderators.",
+        (true, false) => {
+            "Waiting: an API key is configured; save the site rules to turn triage on."
+        }
+        (true, true) => "On.",
+    };
     Ok(Html(
         HomePage {
             site: SITE_NAME,
             viewer,
             nav: "admin",
-            triage: if st.triage_on() {
-                "On."
-            } else {
-                "Off: no API key is configured. Moderation runs on flags and moderators."
-            },
+            done: q.done.is_some(),
+            triage,
+            key: st.triage_key,
             flagged,
+            holds: st.store.holds().await?.len(),
+            suggestions: st.store.triage_suggestions().await?.len(),
+            precision: stats.hold_precision().map(|p| format!("{:.0}%", p * 100.0)),
+            floor: format!("{:.0}%", policy.hold_precision_floor * 100.0),
+            breaker_open: stats.breaker_open(policy.hold_precision_floor),
+            stats,
         }
         .render()?,
     ))
+}
+
+#[derive(Deserialize)]
+pub struct ReasonForm {
+    csrf: String,
+    #[serde(default)]
+    reason: String,
+}
+
+pub async fn breaker_reset(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    axum::Form(f): axum::Form<ReasonForm>,
+) -> Result<Response, AppError> {
+    check_csrf(&viewer, &f.csrf)?;
+    let me = staff(&st, &viewer, Need::Admin, "/admin").await?;
+    let r = st
+        .store
+        .reset_breaker(me.by(), &f.reason, (st.clock)())
+        .await?;
+    outcome(r, "/admin")
+}
+
+// ---------- rules ----------
+
+pub struct RulesRow {
+    pub id: i64,
+    pub author: String,
+    pub age: String,
+    pub body: String,
+}
+
+#[derive(Template)]
+#[template(path = "admin_rules.html")]
+struct RulesPage {
+    site: &'static str,
+    viewer: Viewer,
+    nav: &'static str,
+    done: bool,
+    current: String,
+    history: Vec<RulesRow>,
+}
+
+pub async fn rules_page(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    Query(q): Query<DoneQuery>,
+) -> Page {
+    staff(&st, &viewer, Need::Admin, "/admin/rules").await?;
+    let now = (st.clock)();
+    let history: Vec<RulesRow> = st
+        .store
+        .rules_history()
+        .await?
+        .into_iter()
+        .map(|r| RulesRow {
+            id: r.id,
+            author: r.author.unwrap_or_else(|| "console".into()),
+            age: crate::ago(now - r.created_at),
+            body: r.body,
+        })
+        .collect();
+    Ok(Html(
+        RulesPage {
+            site: SITE_NAME,
+            viewer,
+            nav: "admin",
+            done: q.done.is_some(),
+            current: history.first().map(|r| r.body.clone()).unwrap_or_default(),
+            history,
+        }
+        .render()?,
+    ))
+}
+
+#[derive(Deserialize)]
+pub struct RulesForm {
+    csrf: String,
+    body: String,
+    #[serde(default)]
+    reason: String,
+}
+
+pub async fn rules_save(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    axum::Form(f): axum::Form<RulesForm>,
+) -> Result<Response, AppError> {
+    check_csrf(&viewer, &f.csrf)?;
+    let me = staff(&st, &viewer, Need::Admin, "/admin/rules").await?;
+    let r = st
+        .store
+        .save_rules(&f.body, me.by(), &f.reason, (st.clock)())
+        .await?;
+    if r.is_ok() {
+        st.rules_ready
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    outcome(r, "/admin/rules")
 }
 
 // ---------- settings ----------

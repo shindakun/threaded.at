@@ -5,7 +5,7 @@ use threaded_core::link;
 use threaded_store::{NewStory, Store};
 
 const USAGE: &str = "usage: threaded [serve | seed | keygen DIR | tag add NAME --description TEXT [--boost N] | tag list
-                 | role grant DID moderator|admin | role revoke DID]
+                 | role grant DID moderator|admin | role revoke DID | triage check]
 
   serve       run the web server (default)
   seed        load demo tags and stories into the database
@@ -14,6 +14,7 @@ const USAGE: &str = "usage: threaded [serve | seed | keygen DIR | tag add NAME -
   tag list    list tags
   role grant  make a signed-in account a moderator or admin; DID, not handle
   role revoke return an account to a regular user
+  triage check send one test item to the triage model and print the verdict
 
 environment:
   THREADED_DB          database URL (default sqlite:threaded.db)
@@ -22,7 +23,8 @@ environment:
   THREADED_PUBLIC_URL  public origin, e.g. https://threaded.at; unset runs
                        the localhost development OAuth client
   THREADED_OAUTH_KEY   OAuth signing key file; required with THREADED_PUBLIC_URL
-  THREADED_COOKIE_KEY  cookie key file; required with THREADED_PUBLIC_URL";
+  THREADED_COOKIE_KEY  cookie key file; required with THREADED_PUBLIC_URL
+  THREADED_ANTHROPIC_KEY  Anthropic API key file; unset turns AI triage off";
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -44,6 +46,13 @@ async fn main() -> ExitCode {
                 return ExitCode::from(2);
             }
             r => r,
+        },
+        Some("triage") => match std::env::args().nth(2).as_deref() {
+            Some("check") => triage_check(&db).await,
+            _ => {
+                eprintln!("{USAGE}");
+                return ExitCode::from(2);
+            }
         },
         Some("role") => match role(&db, std::env::args().skip(2).collect()).await {
             Err(e) if e.to_string() == "usage" => {
@@ -165,8 +174,31 @@ async fn serve(db: &str) -> Result<(), BoxError> {
     let policy = threaded_core::policy::Policy::from_settings(
         stored.iter().map(|(k, v)| (k.as_str(), v.as_str())),
     );
-    let state = threaded_web::AppState::new(store, blog, auth);
+    let rules_ready = store.current_rules().await?.is_some();
+    let mut state = threaded_web::AppState::new(store.clone(), blog, auth);
     state.set_policy(policy);
+    state
+        .rules_ready
+        .store(rules_ready, std::sync::atomic::Ordering::Relaxed);
+    match anthropic_key()? {
+        Some(key) => {
+            state.triage_key = true;
+            let triager = threaded_triage::Triager::anthropic(&key)?;
+            let policy = state.policy.clone();
+            tokio::spawn(threaded_triage::run(
+                store,
+                triager,
+                move || policy.read().map(|p| p.clone()).unwrap_or_default(),
+                unix_now,
+            ));
+            if rules_ready {
+                tracing::info!("AI triage is on");
+            } else {
+                tracing::info!("AI triage is waiting for the site rules on /admin/rules");
+            }
+        }
+        None => tracing::info!("AI triage is off: THREADED_ANTHROPIC_KEY is unset"),
+    }
     let app = threaded_web::router(state);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!("listening on http://{addr}");
@@ -359,5 +391,79 @@ async fn role(db: &str, args: Vec<String>) -> Result<(), BoxError> {
             println!("{did}: {from} to {}", role.as_str());
             Ok(())
         }
+    }
+}
+
+fn unix_now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// The Anthropic API key from the file `THREADED_ANTHROPIC_KEY` names, or
+/// `None` when the variable is unset. The key is never logged.
+fn anthropic_key() -> Result<Option<String>, BoxError> {
+    let Some(path) = env("THREADED_ANTHROPIC_KEY") else {
+        return Ok(None);
+    };
+    let key = std::fs::read_to_string(&path)
+        .map_err(|e| format!("reading THREADED_ANTHROPIC_KEY ({path}): {e}"))?;
+    let key = key.trim();
+    if key.is_empty() {
+        return Err(format!("THREADED_ANTHROPIC_KEY ({path}) is empty").into());
+    }
+    Ok(Some(key.to_string()))
+}
+
+/// Sends one fixed test item through the real triage request and prints
+/// what came back, to check the key, the model ID, and the request shape.
+async fn triage_check(db: &str) -> Result<(), BoxError> {
+    let key = anthropic_key()?.ok_or("THREADED_ANTHROPIC_KEY is unset")?;
+    let store = Store::open(db).await?;
+    let stored = store.settings().await?;
+    let policy = threaded_core::policy::Policy::from_settings(
+        stored.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+    );
+    let rules = match store.current_rules().await? {
+        Some(r) => r.body,
+        None => {
+            println!("no site rules saved yet; checking with a one-line placeholder");
+            "No spam: no promotional links without discussion.".to_string()
+        }
+    };
+    let item = threaded_triage::ItemInput {
+        kind: "story".into(),
+        title: "BEST CHEAP WATCHES BUY NOW".into(),
+        url: Some("https://watches.example/deal?ref=123".into()),
+        domain: Some("watches.example".into()),
+        tags: vec!["programming".into()],
+        text: "Limited offer, click the link.".into(),
+        parent_comment: None,
+        flag_reasons: vec![],
+        author_level: "new".into(),
+        author_tenure_days: 0,
+        author_prior_removals: 0,
+    };
+    let triager = threaded_triage::Triager::anthropic(&key)?;
+    println!("model {}", policy.triage_model);
+    let j = triager.judge(&policy.triage_model, &rules, &item).await;
+    let v = &j.verdict;
+    println!(
+        "verdict {} | confidence {} | rule {:?} | {}",
+        v.verdict, v.confidence, v.rule, v.explanation
+    );
+    if let Some(u) = j.usage {
+        println!(
+            "usage: {} input, {} output, {} read from cache, {} written to cache",
+            u.input_tokens,
+            u.output_tokens,
+            u.cache_read_input_tokens,
+            u.cache_creation_input_tokens
+        );
+    }
+    match j.error {
+        Some(e) => Err(format!("triage gave no verdict: {e}").into()),
+        None => Ok(()),
     }
 }

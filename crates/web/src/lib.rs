@@ -35,8 +35,10 @@ pub struct AppState {
     pub clock: Arc<dyn Fn() -> i64 + Send + Sync>,
     /// The rules in force. Admins change them at runtime.
     pub policy: Arc<std::sync::RwLock<threaded_core::policy::Policy>>,
-    /// Whether AI triage is on: an API key is configured.
-    pub triage: bool,
+    /// An Anthropic API key is configured.
+    pub triage_key: bool,
+    /// A rules version exists. Triage reads nothing until one does.
+    pub rules_ready: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl AppState {
@@ -54,7 +56,8 @@ impl AppState {
                     .unwrap_or(0)
             }),
             policy: Default::default(),
-            triage: false,
+            triage_key: false,
+            rules_ready: Default::default(),
         }
     }
 
@@ -69,8 +72,9 @@ impl AppState {
         }
     }
 
+    /// Whether new items are queued for AI triage: a key and rules exist.
     pub fn triage_on(&self) -> bool {
-        self.triage
+        self.triage_key && self.rules_ready.load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
@@ -97,6 +101,10 @@ pub fn router(state: AppState) -> Router {
             "/mod/suggestions/{id}",
             axum::routing::post(staff::decide_suggestion),
         )
+        .route(
+            "/mod/verdicts/{id}",
+            axum::routing::post(staff::decide_verdict),
+        )
         .route("/mod", get(staff::mod_queue))
         .route(
             "/mod/s/{id}",
@@ -112,6 +120,12 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/moderations", get(staff::moderations))
         .route("/admin", get(admin::home))
+        .route(
+            "/admin/rules",
+            get(admin::rules_page).post(admin::rules_save),
+        )
+        .route("/admin/breaker", axum::routing::post(admin::breaker_reset))
+        .route("/moderations/stats", get(staff::moderation_stats))
         .route(
             "/admin/settings",
             get(admin::settings_page).post(admin::settings_save),
@@ -142,6 +156,10 @@ pub fn router(state: AppState) -> Router {
         .route("/comment", axum::routing::post(write::comment))
         .route("/vote", axum::routing::post(write::vote))
         .route("/flag", axum::routing::post(write::flag))
+        .route(
+            "/settings/triage",
+            axum::routing::post(write::settings_triage),
+        )
         .route("/settings", get(write::settings_page).post(write::settings))
         .route("/u/{handle}", get(write::profile))
         .route("/search", get(search_page))

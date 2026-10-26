@@ -31,6 +31,7 @@ serde_urlencoded = "0.7.1"
 sqlx = { version = "0.8.6", default-features = false, features = ["sqlite", "runtime-tokio"] }
 tempfile = "3.27.0"
 threaded-auth = { path = "../auth" }
+threaded-triage = { path = "../triage" }
 tokio = { version = "1.54.1", features = ["rt", "macros"] }
 tower = { version = "0.5", features = ["util"] }
 tracing-subscriber = { version = "0.3.23", features = ["fmt"] }

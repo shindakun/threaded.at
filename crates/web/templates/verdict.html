@@ -1,0 +1,6 @@
+<div class="verdict">
+  <p><strong>Triage: {{ v.verdict }}</strong>{% if !v.confidence.is_empty() %}, {{ v.confidence }} confidence{% endif %}{% if v.held %}, held{% endif %}{% if !v.rule.is_empty() %}. Rule: {{ v.rule }}{% endif %}</p>
+  {% if !v.explanation.is_empty() %}<p>{{ v.explanation }}</p>{% endif %}
+  {% if let Some(e) = v.error %}<p class="meta">No verdict from the model: {{ e }}</p>{% endif %}
+  <p class="meta">{% if v.model.is_empty() %}No model call{% else %}Model {{ v.model }}{% endif %}{% if let Some(rv) = v.rules_version %}, rules version {{ rv }}{% endif %}{% if let Some(d) = v.decision %}. Decided: {{ d }}{% endif %}</p>
+</div>
