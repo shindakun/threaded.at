@@ -480,3 +480,30 @@ async fn suggestions_go_to_the_edits_tab_and_apply_on_accept() {
         "a decided suggestion is no longer open"
     );
 }
+
+#[tokio::test]
+async fn error_pages_keep_the_signed_in_header() {
+    let w = world().await;
+    let user = w.user("user.example", &base(), 100, 0).await;
+    w.role("mod.example", "moderator").await;
+    for (path, status) in [
+        ("/mod", StatusCode::FORBIDDEN),
+        ("/admin", StatusCode::FORBIDDEN),
+        ("/s/nope00", StatusCode::NOT_FOUND),
+    ] {
+        let r = w.get(path, &user).await;
+        assert_eq!(r.status, status, "{path}");
+        assert!(
+            r.body
+                .contains(r#"<a class="who" href="/u/user.example">user.example</a>"#),
+            "{path}: {}",
+            r.body
+        );
+        assert!(
+            !r.body.contains(r#"<a href="/login">Sign in</a>"#),
+            "{path}"
+        );
+    }
+    let signed_out = w.get("/s/nope00", "").await;
+    assert!(signed_out.body.contains(r#"<a href="/login">Sign in</a>"#));
+}

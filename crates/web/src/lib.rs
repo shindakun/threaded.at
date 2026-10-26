@@ -179,6 +179,10 @@ pub fn router(state: AppState) -> Router {
         .route("/static/vote.js", get(vote_js))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
+            error_pages,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
             auth::cookie_layer,
         ))
         .layer(tower_http::catch_panic::CatchPanicLayer::new())
@@ -378,16 +382,57 @@ impl IntoResponse for AppError {
                 )
             }
         };
+        // Rendered here without a viewer; `error_pages` renders it again
+        // with the signed-in user's header.
         let page = ErrorPage {
             site: SITE_NAME,
             viewer: Viewer::default(),
             nav: "",
-            message,
+            message: message.clone(),
         };
-        match page.render() {
+        let mut res = match page.render() {
             Ok(body) => (status, Html(body)).into_response(),
             Err(_) => status.into_response(),
+        };
+        res.extensions_mut().insert(ErrorMessage(message));
+        res
+    }
+}
+
+/// The message of an error response, for `error_pages`.
+#[derive(Clone)]
+struct ErrorMessage(String);
+
+/// Renders error pages with the viewer, so a signed-in user's header stays
+/// signed in on a 404 or a 403. `AppError` cannot see the request itself.
+async fn error_pages(
+    State(st): State<AppState>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    use axum::extract::FromRequestParts;
+    let (parts, body) = req.into_parts();
+    let mut saved = parts.clone();
+    let res = next
+        .run(axum::extract::Request::from_parts(parts, body))
+        .await;
+    let Some(ErrorMessage(message)) = res.extensions().get::<ErrorMessage>().cloned() else {
+        return res;
+    };
+    let Ok(viewer) = Viewer::from_request_parts(&mut saved, &st).await;
+    let page = ErrorPage {
+        site: SITE_NAME,
+        viewer,
+        nav: "",
+        message,
+    };
+    match page.render() {
+        Ok(html) => {
+            let (mut head, _) = res.into_parts();
+            head.headers.remove(header::CONTENT_LENGTH);
+            Response::from_parts(head, axum::body::Body::from(html))
         }
+        Err(_) => res,
     }
 }
 
