@@ -5,7 +5,32 @@
 <nav class="tabs" aria-label="Queue">
   {% for t in tabs %}<a href="/mod?tab={{ t.key }}"{% if t.key == tab %} aria-current="page"{% endif %}>{{ t.label }} <span class="count">{{ t.count }}</span></a>{% endfor %}
 </nav>
-{% if rows.is_empty() %}
+{% if done %}<p class="notice" role="status">Done. The action is in the moderation log.</p>{% endif %}
+{% if tab == "edits" %}
+{% if edits.is_empty() %}<p class="empty">No suggested edits.</p>{% else %}
+<ol class="queue">
+{% for e in edits %}
+<li><article class="queue-row" aria-labelledby="e-{{ e.id }}">
+  <h2 id="e-{{ e.id }}"><a href="/s/{{ e.story_short_id }}">{{ e.current_title }}</a></h2>
+  <p class="meta">Suggested by <a href="/mod/u/{{ e.by }}">{{ e.by }}</a>, {{ e.age }}</p>
+  <dl class="facts">
+    {% if let Some(t) = e.title %}<dt>Title</dt><dd>{{ e.current_title }} <span aria-hidden="true">&rarr;</span><span class="vh">changes to</span> {{ t }}</dd>{% endif %}
+    {% if let Some(t) = e.tags %}<dt>Tags</dt><dd>{{ e.current_tags }} <span aria-hidden="true">&rarr;</span><span class="vh">change to</span> {{ t }}</dd>{% endif %}
+  </dl>
+  {% for d in ["accept", "dismiss"] %}
+  <form method="post" action="/mod/suggestions/{{ e.id }}" class="inline-form">
+    <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+    <input type="hidden" name="decision" value="{{ d }}">
+    <label for="e-{{ e.id }}-{{ d }}">Reason</label>
+    <input id="e-{{ e.id }}-{{ d }}" name="reason" type="text" required>
+    <button type="submit" class="secondary">{% if d == &"accept" %}Accept{% else %}Dismiss{% endif %}</button>
+  </form>
+  {% endfor %}
+</article></li>
+{% endfor %}
+</ol>
+{% endif %}
+{% else if rows.is_empty() %}
 <p class="empty">Nothing waiting.</p>
 {% else %}
 <ol class="queue">

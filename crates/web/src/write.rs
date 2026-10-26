@@ -180,6 +180,7 @@ struct StoryPage {
     body_html: String,
     is_mine: bool,
     is_moderator: bool,
+    can_suggest: bool,
     edited: bool,
     mod_edited: bool,
     /// Why the story is hidden, shown to its author and to moderators.
@@ -388,6 +389,9 @@ pub async fn story_page(
             body_html: markdown::user(&row.body),
             is_mine,
             is_moderator,
+            can_suggest: !is_mine
+                && !row.hidden()
+                && a.as_ref().is_some_and(|a| a.can(Capability::SuggestEdit)),
             edited: row.edited_at.is_some(),
             mod_edited: row.mod_edited,
             status,
@@ -1558,4 +1562,149 @@ pub async fn profile(
         }
         .render()?,
     ))
+}
+
+// ---------- edit suggestions ----------
+
+#[derive(Template)]
+#[template(path = "suggest.html")]
+struct SuggestPage {
+    site: &'static str,
+    viewer: Viewer,
+    nav: &'static str,
+    short_id: String,
+    error: Option<String>,
+    title: String,
+    tags: Vec<TagChoice>,
+}
+
+/// The story, if this user may suggest an edit to it.
+async fn suggestable(
+    st: &AppState,
+    viewer: &Viewer,
+    short_id: &str,
+) -> Result<(Actor, StoryRow), AppError> {
+    let here = format!("/s/{short_id}/suggest");
+    let a = actor(st, viewer, &here).await?;
+    let s = st.store.story(short_id).await?.ok_or(AppError::NotFound)?;
+    if s.user_id == a.user.id {
+        return Err(AppError::Refused(
+            "This is your story: edit it instead.".into(),
+        ));
+    }
+    if !a.can(Capability::SuggestEdit) {
+        return Err(AppError::Refused(format!(
+            "Suggesting edits needs karma of {} or more.",
+            a.policy.thresholds.suggest_karma
+        )));
+    }
+    Ok((a, s))
+}
+
+fn suggest_html(
+    viewer: Viewer,
+    short_id: String,
+    title: String,
+    tags: Vec<TagChoice>,
+    error: Option<String>,
+) -> Result<Response, AppError> {
+    let status = if error.is_some() {
+        axum::http::StatusCode::BAD_REQUEST
+    } else {
+        axum::http::StatusCode::OK
+    };
+    let html = SuggestPage {
+        site: SITE_NAME,
+        viewer,
+        nav: "",
+        short_id,
+        error,
+        title,
+        tags,
+    }
+    .render()?;
+    Ok((status, Html(html)).into_response())
+}
+
+async fn all_tag_choices(st: &AppState, checked: &[String]) -> Result<Vec<TagChoice>, AppError> {
+    Ok(st
+        .store
+        .all_tags()
+        .await?
+        .into_iter()
+        .filter(|t| t.active)
+        .map(|t| TagChoice {
+            checked: checked.contains(&t.name),
+            name: t.name,
+            description: t.description,
+        })
+        .collect())
+}
+
+pub async fn suggest_page(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    Path(short_id): Path<String>,
+) -> Result<Response, AppError> {
+    let (_, s) = suggestable(&st, &viewer, &short_id).await?;
+    let current: Vec<String> = s.tag_list().iter().map(|t| t.to_string()).collect();
+    let tags = all_tag_choices(&st, &current).await?;
+    suggest_html(viewer, short_id, s.title, tags, None)
+}
+
+#[derive(Deserialize)]
+pub struct SuggestForm {
+    csrf: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+pub async fn suggest(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    Path(short_id): Path<String>,
+    HtmlForm(f): HtmlForm<SuggestForm>,
+) -> Result<Response, AppError> {
+    check_csrf(&viewer, &f.csrf)?;
+    let (a, s) = suggestable(&st, &viewer, &short_id).await?;
+    let title = f.title.trim();
+    let mut tags: Vec<String> = Vec::new();
+    for t in &f.tags {
+        if !tags.contains(t) {
+            tags.push(t.clone());
+        }
+    }
+    tags.sort();
+    let active: Vec<String> = st
+        .store
+        .all_tags()
+        .await?
+        .into_iter()
+        .filter(|t| t.active)
+        .map(|t| t.name)
+        .collect();
+    let problem = if title.is_empty() || title.chars().count() > TITLE_MAX {
+        Some(Refusal::Title.to_string())
+    } else if tags.is_empty() || tags.len() > threaded_core::tag::MAX_PER_STORY {
+        Some("Pick 1 to 5 tags.".to_string())
+    } else if let Some(t) = tags.iter().find(|t| !active.contains(t)) {
+        Some(Refusal::UnknownTag(t.clone()).to_string())
+    } else if title == s.title && tags.join(" ") == s.tags {
+        Some("Nothing changed.".to_string())
+    } else {
+        None
+    };
+    if let Some(msg) = problem {
+        let choices = all_tag_choices(&st, &tags).await?;
+        return suggest_html(viewer, short_id, f.title, choices, Some(msg));
+    }
+    let new_title = (title != s.title).then_some(title);
+    let joined = tags.join(" ");
+    let new_tags = (joined != s.tags).then_some(joined.as_str());
+    st.store
+        .suggest(s.id, a.user.id, new_title, new_tags, (st.clock)())
+        .await?;
+    Ok(Redirect::to(&format!("/s/{short_id}?suggested=1")).into_response())
 }

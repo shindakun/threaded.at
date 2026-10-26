@@ -396,3 +396,87 @@ async fn moderator_forms_need_the_csrf_token() {
         assert_eq!(r.status, StatusCode::FORBIDDEN, "{uri}");
     }
 }
+
+#[tokio::test]
+async fn suggestions_go_to_the_edits_tab_and_apply_on_accept() {
+    let (w, author, reader, moderator, id) = setup().await;
+    let low = w.user("low.example", &base(), 100, 0).await;
+    let url = format!("/s/{id}/suggest");
+
+    let r = w.get(&url, &low).await;
+    assert!(
+        r.body
+            .contains("Suggesting edits needs karma of 10 or more."),
+        "{}",
+        r.body
+    );
+    assert!(w.get(&url, &author).await.body.contains("edit it instead"));
+    assert!(w
+        .get(&format!("/s/{id}"), &reader)
+        .await
+        .body
+        .contains("Suggest an edit"));
+
+    let r = w
+        .post(&url, &reader, &[("title", "A story"), ("tags", "rust")])
+        .await;
+    assert!(r.body.contains("Nothing changed."), "{}", r.body);
+    let r = w
+        .post(
+            &url,
+            &reader,
+            &[
+                ("title", "A clearer title"),
+                ("tags", "rust"),
+                ("tags", "meta"),
+            ],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER, "{}", r.body);
+
+    let q = w.get("/mod?tab=edits", &moderator).await.body;
+    assert!(
+        q.contains("A clearer title") && q.contains("meta rust") && q.contains("bob.example"),
+        "{q}"
+    );
+    let sugg_id = q
+        .split("/mod/suggestions/")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap()
+        .to_string();
+    let r = w
+        .post(
+            &format!("/mod/suggestions/{sugg_id}"),
+            &moderator,
+            &[("decision", "accept"), ("reason", "Better")],
+        )
+        .await;
+    assert_eq!(
+        r.location.as_deref(),
+        Some("/mod?tab=edits&done=1"),
+        "{}",
+        r.body
+    );
+    let page = w.get(&format!("/s/{id}"), "").await.body;
+    assert!(page.contains("A clearer title") && page.contains("edited by a moderator"));
+    assert!(w
+        .get("/moderations", "")
+        .await
+        .body
+        .contains("Better (suggested by bob.example)"));
+    let again = w
+        .post(
+            &format!("/mod/suggestions/{sugg_id}"),
+            &moderator,
+            &[("decision", "dismiss"), ("reason", "x")],
+        )
+        .await;
+    assert_eq!(
+        again.status,
+        StatusCode::NOT_FOUND,
+        "a decided suggestion is no longer open"
+    );
+}

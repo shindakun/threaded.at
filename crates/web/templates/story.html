@@ -9,6 +9,7 @@
 {% if !body_html.is_empty() %}<div class="prose story-text">{{ body_html|safe }}</div>{% endif %}
 <div class="item-actions">
   {% if mod_edited %}<span class="edited">edited by a moderator</span>{% else if edited %}<span class="edited">edited</span>{% endif %}
+  {% if can_suggest %}<a href="/s/{{ s.short_id }}/suggest">Suggest an edit</a>{% endif %}
   {% if is_moderator %}<a href="/mod/s/{{ s.short_id }}">Moderate</a>{% endif %}
   {% if is_mine %}
   <a href="/s/{{ s.short_id }}/edit">Edit</a>

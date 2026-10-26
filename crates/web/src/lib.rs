@@ -89,6 +89,14 @@ pub fn router(state: AppState) -> Router {
         .route("/t/{tag}", get(by_tag))
         .route("/domain/{domain}", get(by_domain))
         .route("/s/{short_id}", get(write::story_page))
+        .route(
+            "/s/{id}/suggest",
+            get(write::suggest_page).post(write::suggest),
+        )
+        .route(
+            "/mod/suggestions/{id}",
+            axum::routing::post(staff::decide_suggestion),
+        )
         .route("/mod", get(staff::mod_queue))
         .route(
             "/mod/s/{id}",

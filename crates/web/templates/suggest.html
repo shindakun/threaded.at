@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Suggest an edit | {{ site }}{% endblock %}
+{% block main %}
+<h1>Suggest an edit</h1>
+<p class="lead">Moderators review suggested titles and tags. If they accept, the story changes and the moderation log credits you.</p>
+{% if let Some(e) = error %}<p class="form-error" role="alert">{{ e }}</p>{% endif %}
+<form method="post" action="/s/{{ short_id }}/suggest" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <label for="title">Title</label>
+  <input id="title" name="title" type="text" value="{{ title }}" maxlength="150" required>
+  <fieldset class="tags-pick">
+    <legend>Tags: pick 1 to 5</legend>
+    {% for t in tags %}
+    <label><input type="checkbox" name="tags" value="{{ t.name }}"{% if t.checked %} checked{% endif %}> <span class="tag">{{ t.name }}</span> {{ t.description }}</label>
+    {% endfor %}
+  </fieldset>
+  <button type="submit" class="primary">Suggest</button>
+</form>
+<p><a href="/s/{{ short_id }}">Back to the story</a></p>
+{% endblock %}

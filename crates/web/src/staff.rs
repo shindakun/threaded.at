@@ -156,15 +156,29 @@ pub struct Tab {
     pub count: usize,
 }
 
+/// A suggested edit as the Edits tab shows it.
+pub struct EditRow {
+    pub id: i64,
+    pub story_short_id: String,
+    pub current_title: String,
+    pub current_tags: String,
+    pub title: Option<String>,
+    pub tags: Option<String>,
+    pub by: String,
+    pub age: String,
+}
+
 #[derive(Template)]
 #[template(path = "mod.html")]
 struct ModPage {
     site: &'static str,
     viewer: Viewer,
     nav: &'static str,
+    done: bool,
     tabs: Vec<Tab>,
     tab: &'static str,
     rows: Vec<QueueRow>,
+    edits: Vec<EditRow>,
 }
 
 pub async fn mod_queue(
@@ -175,31 +189,92 @@ pub async fn mod_queue(
     staff(&st, &viewer, Need::Moderator, "/mod").await?;
     let now = (st.clock)();
     let flagged = st.store.flagged(st.policy().flags_to_queue).await?;
-    let tabs = vec![Tab {
-        key: "flagged",
-        label: "Flagged",
-        count: flagged.len(),
-    }];
+    let suggestions = st.store.open_suggestions().await?;
+    let tabs = vec![
+        Tab {
+            key: "flagged",
+            label: "Flagged",
+            count: flagged.len(),
+        },
+        Tab {
+            key: "edits",
+            label: "Edits",
+            count: suggestions.len(),
+        },
+    ];
     let tab = tabs
         .iter()
         .find(|t| Some(t.key) == q.tab.as_deref())
         .unwrap_or(&tabs[0])
         .key;
     let mut rows = Vec::new();
-    for item in flagged {
-        rows.push(queue_row(&st, item, now).await?);
+    let mut edits = Vec::new();
+    match tab {
+        "edits" => {
+            edits = suggestions
+                .into_iter()
+                .map(|g| EditRow {
+                    id: g.id,
+                    story_short_id: g.story_short_id,
+                    current_title: g.current_title,
+                    current_tags: g.current_tags,
+                    title: g.title,
+                    tags: g.tags,
+                    by: g.by_handle,
+                    age: ago(now - g.created_at),
+                })
+                .collect()
+        }
+        _ => {
+            for item in flagged {
+                rows.push(queue_row(&st, item, now).await?);
+            }
+        }
     }
     Ok(Html(
         ModPage {
             site: SITE_NAME,
             viewer,
             nav: "mod",
+            done: q.done.is_some(),
             tabs,
             tab,
             rows,
+            edits,
         }
         .render()?,
     ))
+}
+
+#[derive(Deserialize)]
+pub struct DecideForm {
+    csrf: String,
+    decision: String,
+    #[serde(default)]
+    reason: String,
+}
+
+pub async fn decide_suggestion(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    Path(id): Path<i64>,
+    axum::Form(f): axum::Form<DecideForm>,
+) -> Result<Response, AppError> {
+    check_csrf(&viewer, &f.csrf)?;
+    let me = staff(&st, &viewer, Need::Moderator, "/mod?tab=edits").await?;
+    let accept = match f.decision.as_str() {
+        "accept" => true,
+        "dismiss" => false,
+        _ => return Err(AppError::NotFound),
+    };
+    let r = st
+        .store
+        .decide_suggestion(id, accept, me.by(), &f.reason, (st.clock)())
+        .await?;
+    match r {
+        Ok(()) => Ok(Redirect::to("/mod?tab=edits&done=1").into_response()),
+        Err(e) => outcome(Err(e), "/mod?tab=edits"),
+    }
 }
 
 // ---------- item review ----------

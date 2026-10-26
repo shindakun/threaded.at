@@ -437,71 +437,7 @@ impl Store {
             return Ok(Err(e));
         }
         let mut tx = self.pool().begin().await?;
-        sqlx::query("INSERT INTO story_revisions (story_id, title, url, body, tags, at_cid, edited_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-            .bind(story.id)
-            .bind(&story.title)
-            .bind(&story.url)
-            .bind(&story.body)
-            .bind(&story.tags)
-            .bind(&story.at_cid)
-            .bind(now)
-            .execute(&mut *tx)
-            .await?;
-        if !story.mod_edited {
-            sqlx::query(
-                "UPDATE stories SET author_title = title, author_url = url, author_tags = ? WHERE id = ?",
-            )
-            .bind(&story.tags)
-            .bind(story.id)
-            .execute(&mut *tx)
-            .await?;
-        }
-        sqlx::query(
-            "UPDATE stories SET title = ?, url = ?, canonical_url = ?, domain = ?, \
-             override_by = ?, override_at = ? WHERE id = ?",
-        )
-        .bind(o.title)
-        .bind(o.link.map(|l| l.url.as_str()))
-        .bind(o.link.map(|l| l.canonical.as_str()))
-        .bind(o.link.map(|l| l.domain.as_str()))
-        .bind(by.user_id())
-        .bind(now)
-        .bind(story.id)
-        .execute(&mut *tx)
-        .await?;
-        set_taggings(&mut tx, story.id, o.tags.iter().map(String::as_str)).await?;
-        crate::m2::recompute_rank(&mut tx, story.id).await?;
-        let mut changes = Vec::new();
-        if o.title != story.title {
-            changes.push(format!("title: {} to {}", story.title, o.title));
-        }
-        let new_url = o.link.map(|l| l.url.clone());
-        if new_url != story.url {
-            changes.push(format!(
-                "link: {} to {}",
-                story.url.as_deref().unwrap_or("none"),
-                new_url.as_deref().unwrap_or("none")
-            ));
-        }
-        let new_tags = o.tags.join(" ");
-        if new_tags != story.tags {
-            changes.push(format!("tags: {} to {new_tags}", story.tags));
-        }
-        let detail = changes.join("; ");
-        log(
-            &mut tx,
-            by,
-            &LogEntry {
-                action: "edit story",
-                user_id: Some(story.user_id),
-                story_id: Some(story.id),
-                reason: reason.trim(),
-                detail: &detail,
-                ..Default::default()
-            },
-            now,
-        )
-        .await?;
+        override_story_tx(&mut tx, story, o, by, reason, now).await?;
         tx.commit().await?;
         Ok(Ok(()))
     }
@@ -1331,5 +1267,227 @@ impl Store {
                 )
             })
             .collect())
+    }
+}
+
+async fn override_story_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    story: &crate::StoryRow,
+    o: &StoryOverride<'_>,
+    by: By,
+    reason: &str,
+    now: i64,
+) -> Result<()> {
+    sqlx::query("INSERT INTO story_revisions (story_id, title, url, body, tags, at_cid, edited_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .bind(story.id)
+        .bind(&story.title)
+        .bind(&story.url)
+        .bind(&story.body)
+        .bind(&story.tags)
+        .bind(&story.at_cid)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
+    if !story.mod_edited {
+        sqlx::query(
+            "UPDATE stories SET author_title = title, author_url = url, author_tags = ? WHERE id = ?",
+        )
+        .bind(&story.tags)
+        .bind(story.id)
+        .execute(&mut **tx)
+        .await?;
+    }
+    sqlx::query(
+        "UPDATE stories SET title = ?, url = ?, canonical_url = ?, domain = ?, \
+         override_by = ?, override_at = ? WHERE id = ?",
+    )
+    .bind(o.title)
+    .bind(o.link.map(|l| l.url.as_str()))
+    .bind(o.link.map(|l| l.canonical.as_str()))
+    .bind(o.link.map(|l| l.domain.as_str()))
+    .bind(by.user_id())
+    .bind(now)
+    .bind(story.id)
+    .execute(&mut **tx)
+    .await?;
+    set_taggings(tx, story.id, o.tags.iter().map(String::as_str)).await?;
+    crate::m2::recompute_rank(tx, story.id).await?;
+    let mut changes = Vec::new();
+    if o.title != story.title {
+        changes.push(format!("title: {} to {}", story.title, o.title));
+    }
+    let new_url = o.link.map(|l| l.url.clone());
+    if new_url != story.url {
+        changes.push(format!(
+            "link: {} to {}",
+            story.url.as_deref().unwrap_or("none"),
+            new_url.as_deref().unwrap_or("none")
+        ));
+    }
+    let new_tags = o.tags.join(" ");
+    if new_tags != story.tags {
+        changes.push(format!("tags: {} to {new_tags}", story.tags));
+    }
+    let detail = changes.join("; ");
+    log(
+        tx,
+        by,
+        &LogEntry {
+            action: "edit story",
+            user_id: Some(story.user_id),
+            story_id: Some(story.id),
+            reason: reason.trim(),
+            detail: &detail,
+            ..Default::default()
+        },
+        now,
+    )
+    .await?;
+    Ok(())
+}
+
+/// An open edit suggestion with what it would change.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SuggestionRow {
+    pub id: i64,
+    pub story_id: i64,
+    pub story_short_id: String,
+    pub current_title: String,
+    pub current_tags: String,
+    pub title: Option<String>,
+    pub tags: Option<String>,
+    pub by_handle: String,
+    pub created_at: i64,
+}
+
+impl Store {
+    /// Records a user's suggested title or tags for a story, replacing their
+    /// earlier open suggestion for it. `None` leaves that field as it is.
+    pub async fn suggest(
+        &self,
+        story_id: i64,
+        user_id: i64,
+        title: Option<&str>,
+        tags: Option<&str>,
+        now: i64,
+    ) -> Result<()> {
+        let mut tx = self.pool().begin().await?;
+        sqlx::query(
+            "DELETE FROM suggestions WHERE story_id = ? AND user_id = ? AND decision IS NULL",
+        )
+        .bind(story_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "INSERT INTO suggestions (story_id, user_id, title, tags, created_at) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(story_id)
+        .bind(user_id)
+        .bind(title)
+        .bind(tags)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await
+    }
+
+    /// Open suggestions on visible stories, oldest first.
+    pub async fn open_suggestions(&self) -> Result<Vec<SuggestionRow>> {
+        sqlx::query_as(
+            "SELECT g.id, g.story_id, s.short_id AS story_short_id, s.title AS current_title, \
+             coalesce((SELECT group_concat(name, ' ') FROM (SELECT t.name FROM taggings tg \
+                 JOIN tags t ON t.id = tg.tag_id WHERE tg.story_id = s.id ORDER BY t.name)), '') AS current_tags, \
+             g.title, g.tags, u.handle AS by_handle, g.created_at \
+             FROM suggestions g JOIN stories s ON s.id = g.story_id JOIN users u ON u.id = g.user_id \
+             WHERE g.decision IS NULL AND s.deleted_at IS NULL AND s.removed_at IS NULL \
+             AND s.merged_into IS NULL ORDER BY g.created_at, g.id",
+        )
+        .fetch_all(self.pool())
+        .await
+    }
+
+    /// Accepts a suggestion, applying it as a moderator edit, or dismisses it.
+    pub async fn decide_suggestion(
+        &self,
+        id: i64,
+        accept: bool,
+        by: By,
+        reason: &str,
+        now: i64,
+    ) -> Result<Outcome> {
+        if let Err(e) = reason_ok(reason) {
+            return Ok(Err(e));
+        }
+        let Some(g) = self
+            .open_suggestions()
+            .await?
+            .into_iter()
+            .find(|g| g.id == id)
+        else {
+            return Ok(Err(ModError::NotFound));
+        };
+        let Some(story) = self.story_any(&g.story_short_id).await? else {
+            return Ok(Err(ModError::NotFound));
+        };
+        let mut tx = self.pool().begin().await?;
+        let decided = sqlx::query(
+            "UPDATE suggestions SET decision = ?, decided_by = ?, decided_at = ? \
+             WHERE id = ? AND decision IS NULL",
+        )
+        .bind(if accept { "accepted" } else { "dismissed" })
+        .bind(by.user_id())
+        .bind(now)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+        if decided.rows_affected() == 0 {
+            return Ok(Err(ModError::Refused(
+                "That suggestion is already decided.",
+            )));
+        }
+        if accept {
+            let title = g.title.as_deref().unwrap_or(&story.title);
+            let tags: Vec<String> = g
+                .tags
+                .as_deref()
+                .unwrap_or(&story.tags)
+                .split_whitespace()
+                .map(str::to_string)
+                .collect();
+            let link = story
+                .url
+                .as_deref()
+                .and_then(|u| threaded_core::link::parse(u).ok());
+            let reason = format!("{} (suggested by {})", reason.trim(), g.by_handle);
+            override_story_tx(
+                &mut tx,
+                &story,
+                &StoryOverride {
+                    title,
+                    link: link.as_ref(),
+                    tags: &tags,
+                },
+                by,
+                &reason,
+                now,
+            )
+            .await?;
+        } else {
+            log(
+                &mut tx,
+                by,
+                &LogEntry {
+                    action: "dismiss suggestion",
+                    story_id: Some(story.id),
+                    reason: reason.trim(),
+                    ..Default::default()
+                },
+                now,
+            )
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(Ok(()))
     }
 }

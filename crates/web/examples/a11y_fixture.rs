@@ -159,6 +159,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?
         .map_err(|e| e.to_string())?;
 
+    // A story by someone else to suggest an edit to, and an open suggestion.
+    let link2 = threaded_core::link::parse("https://example.com/a11y-other")?;
+    let theirs = store
+        .insert_story(&NewStory {
+            user_id: other,
+            title: "Their story",
+            link: Some(&link2),
+            body: "",
+            user_is_author: false,
+            tags: &["rust"],
+            created_at: now - 200,
+            record: None,
+        })
+        .await?;
+    let flagger: i64 = sqlx::query_scalar("SELECT id FROM users WHERE did = 'did:plc:flagger1'")
+        .fetch_one(store.pool())
+        .await?;
+    store
+        .suggest(story_id, flagger, Some("A clearer title"), None, now)
+        .await?;
+    sqlx::query("UPDATE users SET karma = 50 WHERE id = ?")
+        .bind(me)
+        .execute(store.pool())
+        .await?;
+
     let key = cookie::Key::from(&std::fs::read(&key_file)?);
     let mut jar = cookie::CookieJar::new();
     jar.private_mut(&key).add(cookie::Cookie::new(
@@ -166,7 +191,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         format!("{did} {sid} votes"),
     ));
     println!(
-        "threaded={} {story} {top}",
+        "threaded={} {story} {top} {theirs}",
         jar.get("threaded").ok_or("cookie")?.value()
     );
     Ok(())
