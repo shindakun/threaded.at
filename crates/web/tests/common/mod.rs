@@ -1,3 +1,5 @@
+pub mod world;
+
 use std::sync::Arc;
 
 use threaded_auth::records::{MemoryRepo, Writer};

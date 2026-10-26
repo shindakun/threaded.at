@@ -148,6 +148,9 @@ pub struct Viewer {
 pub struct Me {
     pub user_id: i64,
     pub session: SessionRef,
+    /// `user`, `moderator`, or `admin`, as read for this request. Pages that
+    /// need a role read it again from the database before acting.
+    pub role: String,
 }
 
 /// The session cookie holds `DID SESSION_ID FLOW`.
@@ -192,11 +195,24 @@ impl FromRequestParts<AppState> for Viewer {
                     viewer.me = Some(Me {
                         user_id: user.id,
                         session,
+                        role: user.role.clone(),
                     });
                 }
             }
         }
         Ok(viewer)
+    }
+}
+
+impl Viewer {
+    pub fn is_moderator(&self) -> bool {
+        self.me
+            .as_ref()
+            .is_some_and(|m| m.role == "moderator" || m.role == "admin")
+    }
+
+    pub fn is_admin(&self) -> bool {
+        self.me.as_ref().is_some_and(|m| m.role == "admin")
     }
 }
 

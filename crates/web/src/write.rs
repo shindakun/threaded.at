@@ -22,7 +22,7 @@ use threaded_store::{
 };
 
 use crate::auth::{check_csrf, Me, Viewer};
-use crate::{ago, mark_votes, markdown, AppError, AppState, Page, StoryView, SITE_NAME};
+use crate::{ago, markdown, prepare_rows, AppError, AppState, Page, StoryView, SITE_NAME};
 
 pub const STORY_REASONS: &[(&str, &str)] = &[
     ("off-topic", "Off-topic"),
@@ -38,7 +38,7 @@ pub const COMMENT_REASONS: &[(&str, &str)] = &[
     ("spam", "Spam"),
 ];
 
-fn reason_label(code: &str) -> String {
+pub(crate) fn reason_label(code: &str) -> String {
     STORY_REASONS
         .iter()
         .chain(COMMENT_REASONS)
@@ -135,10 +135,14 @@ fn check_text(text: &str, required: bool) -> Result<(), AppError> {
 pub struct CommentView {
     pub short_id: String,
     pub handle: String,
+    pub badges: Vec<threaded_store::Badge>,
     pub age: String,
     pub body_html: String,
     pub score: i64,
-    pub deleted: bool,
+    /// "[deleted]" or "[removed]": the comment stays only to hold its replies.
+    pub placeholder: Option<&'static str>,
+    /// Why the comment is hidden, shown to its author and to moderators.
+    pub status: Option<String>,
     pub edited: bool,
     pub is_mine: bool,
     pub voted: bool,
@@ -175,11 +179,31 @@ struct StoryPage {
     s: StoryView,
     body_html: String,
     is_mine: bool,
+    is_moderator: bool,
     edited: bool,
+    mod_edited: bool,
+    /// Why the story is hidden, shown to its author and to moderators.
+    status: Option<String>,
+    /// "Locked: REASON" or "Locked: archived".
+    lock_note: Option<String>,
     can_comment: bool,
     comment_note: Option<String>,
     flag: FlagView,
     thread: Vec<ThreadEvent>,
+}
+
+/// Why an item is hidden, worded for its author.
+fn hidden_status(removed_reason: Option<&str>, removed: bool, held: bool) -> Option<String> {
+    if removed {
+        Some(format!(
+            "Removed by a moderator: {}",
+            removed_reason.unwrap_or("no reason given")
+        ))
+    } else if held {
+        Some("Held for review: spam (automated)".to_string())
+    } else {
+        None
+    }
 }
 
 fn flag_allowed(
@@ -260,14 +284,27 @@ pub async fn story_page(
     State(st): State<AppState>,
     viewer: Viewer,
     Path(short_id): Path<String>,
-) -> Page {
-    let row = st.store.story(&short_id).await?.ok_or(AppError::NotFound)?;
+) -> Result<Response, AppError> {
+    let row = st
+        .store
+        .story_any(&short_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if let Some(target) = &row.merged_into {
+        return Ok(Redirect::permanent(&format!("/s/{target}")).into_response());
+    }
     let now = (st.clock)();
     let here = format!("/s/{short_id}");
     let a = match &viewer.me {
         Some(_) => actor(&st, &viewer, &here).await.ok(),
         None => None,
     };
+    let is_mine = a.as_ref().is_some_and(|a| a.user.id == row.user_id);
+    let is_moderator = viewer.is_moderator();
+    if row.hidden() && !is_mine && !is_moderator {
+        return Err(AppError::NotFound);
+    }
+    let policy = st.policy();
     let votes: HashMap<Target, threaded_store::VoteRow> = match &a {
         Some(a) => st
             .store
@@ -278,8 +315,8 @@ pub async fn story_page(
         None => HashMap::new(),
     };
     let story_vote = votes.get(&Target::Story(row.id));
-    let is_mine = a.as_ref().is_some_and(|a| a.user.id == row.user_id);
-    let flag = flag_view(
+    let locked = is_locked(&row, &policy, now);
+    let mut flag = flag_view(
         &st,
         a.as_ref(),
         Flaggable {
@@ -292,28 +329,56 @@ pub async fn story_page(
         story_vote.and_then(|v| v.reason.as_deref()),
     )
     .await?;
+    if locked && flag.current.is_none() {
+        flag.allowed = false;
+    }
 
     let (can_comment, comment_note) = match &a {
         None => (false, None),
+        _ if row.hidden() => (false, None),
         Some(a) if !a.can(Capability::Comment) => {
             (false, Some("Your account cannot comment.".to_string()))
         }
-        Some(a) if is_locked(&row, &a.policy, now) => (
-            false,
-            Some("This story is closed to new comments.".to_string()),
-        ),
+        Some(_) if locked => (false, None),
         Some(_) if row.at_uri.is_none() => (
             false,
             Some("This story has no record to reply to.".to_string()),
         ),
         Some(_) => (true, None),
     };
+    let lock_note = if row.locked {
+        Some(format!(
+            "Locked: {}",
+            row.locked_reason.as_deref().unwrap_or("no reason given")
+        ))
+    } else if locked {
+        Some("Locked: archived".to_string())
+    } else {
+        None
+    };
 
     let comments = st.store.comments_for_story(row.id).await?;
-    let thread = build_thread(&st, a.as_ref(), &comments, &votes, can_comment).await?;
+    let thread = build_thread(
+        &st,
+        a.as_ref(),
+        is_moderator,
+        &comments,
+        &votes,
+        can_comment,
+        locked,
+    )
+    .await?;
 
+    let status = hidden_status(
+        row.removed_reason.as_deref(),
+        row.removed_at.is_some(),
+        row.held_at.is_some(),
+    );
     let mut s = StoryView::from_row(row.clone(), now);
-    mark_votes(&st, &viewer, std::slice::from_mut(&mut s)).await?;
+    prepare_rows(&st, &viewer, std::slice::from_mut(&mut s)).await?;
+    if locked || row.hidden() {
+        s.can_vote = false;
+    }
     Ok(Html(
         StoryPage {
             site: SITE_NAME,
@@ -322,7 +387,11 @@ pub async fn story_page(
             here,
             body_html: markdown::user(&row.body),
             is_mine,
+            is_moderator,
             edited: row.edited_at.is_some(),
+            mod_edited: row.mod_edited,
+            status,
+            lock_note,
             can_comment,
             comment_note,
             flag,
@@ -330,27 +399,43 @@ pub async fn story_page(
             s,
         }
         .render()?,
-    ))
+    )
+    .into_response())
 }
 
 async fn build_thread(
     st: &AppState,
     a: Option<&Actor>,
+    is_moderator: bool,
     comments: &[CommentRow],
     votes: &HashMap<Target, threaded_store::VoteRow>,
     can_comment: bool,
+    locked: bool,
 ) -> Result<Vec<ThreadEvent>, AppError> {
     let now = (st.clock)();
+    let me = a.map(|a| a.user.id);
+    let badges =
+        crate::badge_map(st, &comments.iter().map(|c| c.user_id).collect::<Vec<_>>()).await?;
     let mut children: HashMap<Option<i64>, Vec<&CommentRow>> = HashMap::new();
     for c in comments {
         children.entry(c.parent_id).or_default().push(c);
     }
-    // A deleted comment stays as "[deleted]" only while a reply below it is visible.
-    fn visible(c: &CommentRow, children: &HashMap<Option<i64>, Vec<&CommentRow>>) -> bool {
-        c.deleted_at.is_none()
+    // Whether this viewer sees the comment itself. A hidden comment shows to
+    // its author and to moderators.
+    let shown = |c: &CommentRow| {
+        c.deleted_at.is_none() && (!c.hidden() || is_moderator || me == Some(c.user_id))
+    };
+    // A comment the viewer cannot see stays as a placeholder only while a
+    // reply below it is visible.
+    fn visible(
+        c: &CommentRow,
+        children: &HashMap<Option<i64>, Vec<&CommentRow>>,
+        shown: &dyn Fn(&CommentRow) -> bool,
+    ) -> bool {
+        shown(c)
             || children
                 .get(&Some(c.id))
-                .is_some_and(|k| k.iter().any(|x| visible(x, children)))
+                .is_some_and(|k| k.iter().any(|x| visible(x, children, shown)))
     }
 
     let mut events = Vec::new();
@@ -362,7 +447,7 @@ async fn build_thread(
             .map(|v| {
                 v.iter()
                     .copied()
-                    .filter(|c| visible(c, &children))
+                    .filter(|c| visible(c, &children, &shown))
                     .collect()
             })
             .unwrap_or_default();
@@ -378,7 +463,15 @@ async fn build_thread(
         let vote = votes.get(&Target::Comment(c.id));
         let is_mine = a.is_some_and(|a| a.user.id == c.user_id);
         let deleted = c.deleted_at.is_some();
-        let flag = flag_view(
+        let placeholder = if deleted {
+            Some("[deleted]")
+        } else if !shown(c) {
+            Some("[removed]")
+        } else {
+            None
+        };
+        let gone = placeholder.is_some();
+        let mut flag = flag_view(
             st,
             a,
             Flaggable {
@@ -391,27 +484,40 @@ async fn build_thread(
             vote.and_then(|v| v.reason.as_deref()),
         )
         .await?;
+        if (locked || c.hidden()) && flag.current.is_none() {
+            flag.allowed = false;
+        }
         events.push(ThreadEvent::ItemStart(Box::new(CommentView {
             short_id: c.short_id.clone(),
             handle: c.handle.clone(),
+            badges: badges.get(&c.user_id).cloned().unwrap_or_default(),
             age: ago(now - c.created_at),
-            body_html: if deleted {
+            body_html: if gone {
                 String::new()
             } else {
                 markdown::user(&c.body)
             },
             score: c.score,
-            deleted,
+            placeholder,
+            status: if gone {
+                None
+            } else {
+                hidden_status(
+                    c.removed_reason.as_deref(),
+                    c.removed_at.is_some(),
+                    c.held_at.is_some(),
+                )
+            },
             edited: c.edited_at.is_some(),
             is_mine,
             voted: vote.is_some_and(|v| v.value == 1),
-            can_vote: a.is_some() && !is_mine && !deleted,
-            can_reply: can_comment && !deleted && c.at_uri.is_some(),
+            can_vote: a.is_some() && !is_mine && !gone && !c.hidden() && !locked,
+            can_reply: can_comment && !gone && !c.hidden() && c.at_uri.is_some(),
             flag,
         })));
         let has_kids = children
             .get(&Some(c.id))
-            .is_some_and(|k| k.iter().any(|x| visible(x, &children)));
+            .is_some_and(|k| k.iter().any(|x| visible(x, &children, &shown)));
         if has_kids {
             events.push(ThreadEvent::ListOpen);
             stack.push((Some(c.id), 0));
@@ -723,9 +829,14 @@ struct Item {
     score: i64,
     record: Option<RecordRef>,
     story_short_id: String,
+    /// The story takes no new votes or flags.
+    locked: bool,
 }
 
+/// A visible story or comment by kind and short ID.
 async fn item(st: &AppState, kind: &str, id: &str) -> Result<Item, AppError> {
+    let policy = st.policy();
+    let now = (st.clock)();
     match kind {
         "story" => {
             let s = st.store.story(id).await?.ok_or(AppError::NotFound)?;
@@ -735,20 +846,27 @@ async fn item(st: &AppState, kind: &str, id: &str) -> Result<Item, AppError> {
                 created_at: s.created_at,
                 score: s.score,
                 record: record_ref(&s.at_uri, &s.at_cid),
+                locked: is_locked(&s, &policy, now),
                 story_short_id: s.short_id,
             })
         }
         "comment" => {
             let c = st.store.comment(id).await?.ok_or(AppError::NotFound)?;
-            if c.deleted_at.is_some() {
+            if c.deleted_at.is_some() || c.hidden() {
                 return Err(AppError::NotFound);
             }
+            let s = st
+                .store
+                .story(&c.story_short_id)
+                .await?
+                .ok_or(AppError::NotFound)?;
             Ok(Item {
                 target: Target::Comment(c.id),
                 author_id: c.user_id,
                 created_at: c.created_at,
                 score: c.score,
                 record: record_ref(&c.at_uri, &c.at_cid),
+                locked: is_locked(&s, &policy, now),
                 story_short_id: c.story_short_id,
             })
         }
@@ -801,6 +919,9 @@ pub async fn vote(
     let now = (st.clock)();
     let current = st.store.vote(a.user.id, it.target).await?;
     let removing = current.as_ref().is_some_and(|v| v.value == 1);
+    if it.locked && !removing {
+        return Err(AppError::Refused("This story is locked.".into()));
+    }
     if let Some(uri) = current.as_ref().and_then(|v| v.at_uri.as_deref()) {
         withdraw_vote_record(&st, &a.me.session, uri).await;
     }
@@ -880,6 +1001,9 @@ pub async fn flag(
                 .await?;
         }
         return Ok(Redirect::to(&back).into_response());
+    }
+    if it.locked {
+        return Err(AppError::Refused("This story is locked.".into()));
     }
     let is_story = matches!(it.target, Target::Story(_));
     let reasons = if is_story {
@@ -1391,7 +1515,7 @@ pub async fn profile(
         .into_iter()
         .map(|r| StoryView::from_row(r, now))
         .collect();
-    mark_votes(&st, &viewer, &mut stories).await?;
+    prepare_rows(&st, &viewer, &mut stories).await?;
     let comments = st
         .store
         .comments_by_user(user.id, 30)
@@ -1413,7 +1537,7 @@ pub async fn profile(
             .into_iter()
             .map(|r| StoryView::from_row(r, now))
             .collect();
-        mark_votes(&st, &viewer, &mut l).await?;
+        prepare_rows(&st, &viewer, &mut l).await?;
         Some(l)
     } else {
         None

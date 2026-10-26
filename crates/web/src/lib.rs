@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 pub mod auth;
 pub mod blog;
 pub mod markdown;
+pub mod staff;
 pub mod write;
 
 use std::sync::Arc;
@@ -80,6 +82,21 @@ pub fn router(state: AppState) -> Router {
         .route("/t/{tag}", get(by_tag))
         .route("/domain/{domain}", get(by_domain))
         .route("/s/{short_id}", get(write::story_page))
+        .route("/mod", get(staff::mod_queue))
+        .route(
+            "/mod/s/{id}",
+            get(staff::mod_story).post(staff::mod_story_action),
+        )
+        .route(
+            "/mod/c/{id}",
+            get(staff::mod_comment).post(staff::mod_comment_action),
+        )
+        .route(
+            "/mod/u/{handle}",
+            get(staff::mod_user).post(staff::mod_user_action),
+        )
+        .route("/moderations", get(staff::moderations))
+        .route("/admin", get(staff::admin_home))
         .route(
             "/s/{short_id}/edit",
             get(write::story_edit_page).post(write::story_edit),
@@ -139,6 +156,8 @@ pub struct StoryView {
     pub comments: i64,
     pub age: String,
     pub handle: String,
+    pub user_id: i64,
+    pub badges: Vec<threaded_store::Badge>,
     pub tags: Vec<String>,
 }
 
@@ -147,6 +166,8 @@ impl StoryView {
         StoryView {
             id: r.id,
             author_did: r.author_did.clone(),
+            user_id: r.user_id,
+            badges: Vec::new(),
             voted: false,
             can_vote: false,
             href: r
@@ -246,6 +267,8 @@ struct ErrorPage {
 pub enum AppError {
     NotFound,
     Forbidden,
+    /// Signed in, but without the role the page needs; the message says which.
+    Denied(&'static str),
     /// Sign-in is needed; returns to this path afterwards.
     SignIn(String),
     /// The request breaks a rule; the message says which.
@@ -293,6 +316,7 @@ impl IntoResponse for AppError {
                 )
             }
             AppError::NotFound => (StatusCode::NOT_FOUND, "Not found.".to_string()),
+            AppError::Denied(m) => (StatusCode::FORBIDDEN, m.to_string()),
             AppError::Forbidden => (
                 StatusCode::FORBIDDEN,
                 "That form expired. Go back, reload the page, and try again.".to_string(),
@@ -375,7 +399,7 @@ async fn listing(st: &AppState, viewer: Viewer, spec: Spec<'_>, page: Option<i64
         .take(PAGE_SIZE as usize)
         .map(|r| StoryView::from_row(r, now))
         .collect();
-    mark_votes(st, &viewer, &mut stories).await?;
+    prepare_rows(st, &viewer, &mut stories).await?;
     let link = |p: i64| format!("{}?page={p}{}", spec.base, spec.extra);
     let here = if page > 1 {
         link(page)
@@ -513,7 +537,7 @@ async fn search_page(
         .into_iter()
         .map(|r| StoryView::from_row(r, now))
         .collect();
-    mark_votes(&st, &viewer, &mut stories).await?;
+    prepare_rows(&st, &viewer, &mut stories).await?;
     Ok(Html(
         SearchPage {
             site: SITE_NAME,
@@ -591,11 +615,32 @@ async fn blog_post(State(st): State<AppState>, viewer: Viewer, Path(slug): Path<
 }
 
 /// Marks which stories the viewer upvoted and may vote on.
-pub(crate) async fn mark_votes(
+/// Active role badges for these users, by user ID.
+pub(crate) async fn badge_map(
+    st: &AppState,
+    user_ids: &[i64],
+) -> Result<HashMap<i64, Vec<threaded_store::Badge>>, AppError> {
+    let mut ids = user_ids.to_vec();
+    ids.sort_unstable();
+    ids.dedup();
+    let mut map: HashMap<i64, Vec<threaded_store::Badge>> = HashMap::new();
+    for b in st.store.badges(&ids).await? {
+        map.entry(b.user_id).or_default().push(b);
+    }
+    Ok(map)
+}
+
+/// Fills in what a story row needs beyond its database row: the authors'
+/// badges, and for a signed-in viewer, their upvotes.
+pub(crate) async fn prepare_rows(
     st: &AppState,
     viewer: &Viewer,
     stories: &mut [StoryView],
 ) -> Result<(), AppError> {
+    let badges = badge_map(st, &stories.iter().map(|s| s.user_id).collect::<Vec<_>>()).await?;
+    for s in stories.iter_mut() {
+        s.badges = badges.get(&s.user_id).cloned().unwrap_or_default();
+    }
     let Some(me) = &viewer.me else { return Ok(()) };
     let ids: Vec<i64> = stories.iter().map(|s| s.id).collect();
     let voted = st.store.upvoted_stories(me.user_id, &ids).await?;

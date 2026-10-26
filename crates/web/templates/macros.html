@@ -40,3 +40,5 @@
 {% endif %}
 {% endif %}
 {% endmacro %}
+
+{% macro badges(list) %}{% for b in list.iter() %} {% if let Some(href) = b.link.as_deref() %}<a class="badge" href="{{ href }}">{{ b.label }}</a>{% else %}<span class="badge">{{ b.label }}</span>{% endif %}{% endfor %}{% endmacro %}

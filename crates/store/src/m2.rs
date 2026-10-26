@@ -16,6 +16,7 @@ pub struct UserRow {
     pub vouched_by: Option<i64>,
     pub created_at: i64,
     pub banned_at: Option<i64>,
+    pub banned_reason: Option<String>,
 }
 
 impl UserRow {
@@ -71,12 +72,23 @@ pub struct CommentRow {
     pub handle: String,
     pub at_uri: Option<String>,
     pub at_cid: Option<String>,
+    pub removed_at: Option<i64>,
+    pub removed_reason: Option<String>,
+    pub held_at: Option<i64>,
+}
+
+impl CommentRow {
+    /// Removed or held: hidden from everyone but its author and moderators.
+    pub fn hidden(&self) -> bool {
+        self.removed_at.is_some() || self.held_at.is_some()
+    }
 }
 
 const COMMENT_COLUMNS: &str = "c.id, c.short_id, c.story_id, s.short_id AS story_short_id, \
      s.title AS story_title, c.parent_id, c.depth, c.body, c.score, c.flags, c.created_at, \
      c.edited_at, c.deleted_at, c.user_id, u.did AS author_did, \
-     CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS handle, c.at_uri, c.at_cid";
+     CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS handle, c.at_uri, c.at_cid, \
+     c.removed_at, c.removed_reason, c.held_at";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Target {
@@ -140,14 +152,14 @@ pub struct UpvoteRecord {
     pub at_uri: Option<String>,
 }
 
-fn target_cols(t: Target) -> (&'static str, i64) {
+pub(crate) fn target_cols(t: Target) -> (&'static str, i64) {
     match t {
         Target::Story(id) => ("story_id", id),
         Target::Comment(id) => ("comment_id", id),
     }
 }
 
-async fn recompute_rank(tx: &mut Transaction<'_, Sqlite>, story_id: i64) -> Result<()> {
+pub(crate) async fn recompute_rank(tx: &mut Transaction<'_, Sqlite>, story_id: i64) -> Result<()> {
     let (score, user_id, is_link, user_is_author, created_at): (i64, i64, bool, bool, i64) =
         sqlx::query_as("SELECT score, user_id, url IS NOT NULL, user_is_author, created_at FROM stories WHERE id = ?")
             .bind(story_id)
@@ -184,7 +196,7 @@ async fn recompute_rank(tx: &mut Transaction<'_, Sqlite>, story_id: i64) -> Resu
 }
 
 /// Karma is the sum of a user's item scores, less the implicit vote on each.
-async fn recompute_karma(tx: &mut Transaction<'_, Sqlite>, user_id: i64) -> Result<()> {
+pub(crate) async fn recompute_karma(tx: &mut Transaction<'_, Sqlite>, user_id: i64) -> Result<()> {
     sqlx::query(
         "UPDATE users SET karma = \
          (SELECT coalesce(sum(score - 1), 0) FROM stories WHERE user_id = ?1 AND deleted_at IS NULL) + \
@@ -199,14 +211,14 @@ async fn recompute_karma(tx: &mut Transaction<'_, Sqlite>, user_id: i64) -> Resu
 
 impl Store {
     pub async fn user_by_did(&self, did: &str) -> Result<Option<UserRow>> {
-        sqlx::query_as("SELECT id, did, handle, handle_verified, role, karma, public_votes, vouched_by, created_at, banned_at FROM users WHERE did = ?")
+        sqlx::query_as("SELECT id, did, handle, handle_verified, role, karma, public_votes, vouched_by, created_at, banned_at, banned_reason FROM users WHERE did = ?")
             .bind(did)
             .fetch_optional(&self.pool)
             .await
     }
 
     pub async fn user_by_handle(&self, handle: &str) -> Result<Option<UserRow>> {
-        sqlx::query_as("SELECT id, did, handle, handle_verified, role, karma, public_votes, vouched_by, created_at, banned_at FROM users WHERE handle = ? OR did = ?1 LIMIT 1")
+        sqlx::query_as("SELECT id, did, handle, handle_verified, role, karma, public_votes, vouched_by, created_at, banned_at, banned_reason FROM users WHERE handle = ? OR did = ?1 LIMIT 1")
             .bind(handle)
             .fetch_optional(&self.pool)
             .await
@@ -454,6 +466,24 @@ impl Store {
             .bind(now)
             .execute(&mut *tx)
             .await?;
+        if story.mod_edited {
+            // A moderator's title, URL, and tags stay in force; the author's
+            // own values change underneath them.
+            sqlx::query(
+                "UPDATE stories SET author_title = ?, author_url = ?, author_tags = ?, body = ?, \
+                 at_cid = coalesce(?, at_cid), edited_at = ? WHERE id = ?",
+            )
+            .bind(title)
+            .bind(link.map(|l| l.url.as_str()))
+            .bind(tags.join(" "))
+            .bind(body)
+            .bind(cid)
+            .bind(now)
+            .bind(story.id)
+            .execute(&mut *tx)
+            .await?;
+            return tx.commit().await;
+        }
         sqlx::query(
             "UPDATE stories SET title = ?, url = ?, canonical_url = ?, domain = ?, body = ?, \
              at_cid = coalesce(?, at_cid), edited_at = ? WHERE id = ?",
@@ -585,7 +615,8 @@ impl Store {
         sqlx::query_as(&format!(
             "SELECT {COMMENT_COLUMNS} FROM comments c JOIN users u ON u.id = c.user_id \
              JOIN stories s ON s.id = c.story_id \
-             WHERE c.user_id = ? AND c.deleted_at IS NULL AND {VISIBLE} ORDER BY c.created_at DESC LIMIT ?"
+             WHERE c.user_id = ? AND c.deleted_at IS NULL AND c.removed_at IS NULL AND c.held_at IS NULL \
+             AND {VISIBLE} ORDER BY c.created_at DESC LIMIT ?"
         ))
         .bind(user_id)
         .bind(limit)

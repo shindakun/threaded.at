@@ -4,9 +4,12 @@
 {% block main %}
 <h1 class="vh">{{ s.title }}</h1>
 <ol class="stories">{% include "story_row.html" %}</ol>
+{% if let Some(st) = status %}<p class="mod-status" role="status">{{ st }}</p>{% endif %}
+{% if let Some(l) = lock_note %}<p class="mod-status">{{ l }}</p>{% endif %}
 {% if !body_html.is_empty() %}<div class="prose story-text">{{ body_html|safe }}</div>{% endif %}
 <div class="item-actions">
-  {% if edited %}<span class="edited">edited</span>{% endif %}
+  {% if mod_edited %}<span class="edited">edited by a moderator</span>{% else if edited %}<span class="edited">edited</span>{% endif %}
+  {% if is_moderator %}<a href="/mod/s/{{ s.short_id }}">Moderate</a>{% endif %}
   {% if is_mine %}
   <a href="/s/{{ s.short_id }}/edit">Edit</a>
   <details class="confirm">
@@ -48,12 +51,13 @@
   {% when crate::write::ThreadEvent::ItemEnd %}</li>
   {% when crate::write::ThreadEvent::ItemStart with (c) %}<li>
     <article class="comment" id="c-{{ c.short_id }}" aria-label="Comment by {{ c.handle }}, {{ c.age }}">
-      {% if c.deleted %}
-      <p class="deleted">[deleted]</p>
+      {% if let Some(p) = c.placeholder %}
+      <p class="deleted">{{ p }}</p>
       {% else %}
+      {% if let Some(st) = c.status %}<p class="mod-status">{{ st }}</p>{% endif %}
       <div class="comment-head">
         {% if c.can_vote %}{% call m::vote("comment", c.short_id, c.voted, c.score, c.handle, viewer.csrf, here) %}{% endcall %}{% endif %}
-        <a class="handle" href="/u/{{ c.handle }}">{{ c.handle }}</a>
+        <a class="handle" href="/u/{{ c.handle }}">{{ c.handle }}</a>{% call m::badges(c.badges) %}{% endcall %}
         <a class="age" href="#c-{{ c.short_id }}">{{ c.age }}</a>
         <span data-score data-unit>{{ c.score }} {% if c.score == 1 %}point{% else %}points{% endif %}</span>
         {% if c.edited %}<span class="edited">edited</span>{% endif %}
@@ -61,6 +65,7 @@
       <div class="prose">{{ c.body_html|safe }}</div>
       <div class="item-actions">
         {% if c.can_reply %}<a href="/c/{{ c.short_id }}/reply">Reply</a>{% endif %}
+        {% if viewer.is_moderator() %}<a href="/mod/c/{{ c.short_id }}">Moderate</a>{% endif %}
         {% if c.is_mine %}
         <a href="/c/{{ c.short_id }}/edit">Edit</a>
         <details class="confirm">

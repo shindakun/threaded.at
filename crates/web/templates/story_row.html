@@ -11,7 +11,7 @@
       {% if !s.domain.is_empty() %}<a class="domain" href="/domain/{{ s.domain }}">{{ s.domain }}</a>{% endif %}
     </div>
     <div class="meta">
-      by <a class="handle" href="/u/{{ s.handle }}">{{ s.handle }}</a> {{ s.age }} |
+      by <a class="handle" href="/u/{{ s.handle }}">{{ s.handle }}</a>{% call m::badges(s.badges) %}{% endcall %} {{ s.age }} |
       <a href="/s/{{ s.short_id }}">{% if s.comments == 0 %}no comments{% else if s.comments == 1 %}1 comment{% else %}{{ s.comments }} comments{% endif %}</a>
     </div>
   </div>

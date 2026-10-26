@@ -1,11 +1,11 @@
-//! Adds a signed-in user with a story, a thread, a vote, and a flag to a
-//! development database, then prints the session cookie (`name=value`) for
-//! the accessibility audit of signed-in pages.
+//! Adds a signed-in admin with a story, a thread, votes, flags, and
+//! moderation history to a development database, then prints the session
+//! cookie (`name=value`) for the accessibility audit of signed-in pages.
 //!
 //! usage: a11y_fixture DB_URL COOKIE_KEY_FILE
 
 use threaded_auth::client::{scopes, Flow, Namespace};
-use threaded_store::{NewComment, NewStory, Store, Target, VoteChange};
+use threaded_store::{By, NewComment, NewStory, Store, Target, VoteChange};
 
 const DAY: i64 = 86_400;
 
@@ -25,6 +25,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let me = store.record_sign_in(did, handle, true, now).await?;
     let other = store
         .record_sign_in("did:plc:a11yother", "other.example", true, now)
+        .await?;
+    sqlx::query("UPDATE users SET role = 'admin' WHERE id = ?")
+        .bind(me)
+        .execute(store.pool())
         .await?;
     sqlx::query("UPDATE users SET created_at = ?, public_votes = 1 WHERE id IN (?, ?)")
         .bind(now - 200 * DAY)
@@ -99,6 +103,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             now,
         )
         .await?;
+
+    // Enough flags to reach the queue, a removed reply, a badge, and log rows.
+    for name in ["flagger1", "flagger2"] {
+        let id = store
+            .record_sign_in(
+                &format!("did:plc:{name}"),
+                &format!("{name}.example"),
+                true,
+                now,
+            )
+            .await?;
+        store
+            .set_vote(
+                id,
+                Target::Story(story_id),
+                VoteChange::Flag { reason: "spam" },
+                now,
+            )
+            .await?;
+    }
+    let removed = store
+        .insert_comment(&NewComment {
+            story_id,
+            user_id: other,
+            parent_id: Some(top_id),
+            body: "A removed reply.",
+            created_at: now - 300,
+            record: None,
+        })
+        .await?;
+    let removed_id = store.comment(&removed).await?.ok_or("comment missing")?.id;
+    store
+        .remove(
+            Target::Comment(removed_id),
+            By::Moderator(me),
+            "Unkind",
+            now,
+        )
+        .await?
+        .map_err(|e| e.to_string())?;
+    store
+        .grant_badge(
+            other,
+            "Maintainer",
+            Some("https://example.com/project"),
+            By::Moderator(me),
+            "Runs the project",
+            now,
+        )
+        .await?
+        .map_err(|e| e.to_string())?;
+    store
+        .add_note(other, me, "A private note.", now)
+        .await?
+        .map_err(|e| e.to_string())?;
 
     let key = cookie::Key::from(&std::fs::read(&key_file)?);
     let mut jar = cookie::CookieJar::new();

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Moderation log | {{ site }}{% endblock %}
+{% block main %}
+<h1>Moderation log</h1>
+<p class="lead">Every action moderators and triage take, with the reason given.</p>
+{% if rows.is_empty() %}<p class="empty">No actions yet.</p>{% else %}
+<ol class="modlog">
+{% for l in rows %}
+<li><p><span class="meta">{{ l.when }}</span> {{ l.who }}: {{ l.action }}{% if let Some((href, text)) = l.target %}, <a href="{{ href }}">{{ text }}</a>{% endif %}{% if let Some(u) = l.user %} by <a href="/u/{{ u }}">{{ u }}</a>{% endif %}</p>
+{% if !l.reason.is_empty() %}<p class="reason">{{ l.reason }}</p>{% endif %}
+{% if !l.detail.is_empty() %}<p class="meta">{{ l.detail }}</p>{% endif %}</li>
+{% endfor %}
+</ol>
+{% endif %}
+<nav class="pager" aria-label="Pages">
+  {% if page > 1 %}<a href="/moderations?page={{ page - 1 }}">Newer</a>{% endif %}
+  {% if more %}<a href="/moderations?page={{ page + 1 }}">Older</a>{% endif %}
+</nav>
+{% endblock %}

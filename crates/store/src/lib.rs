@@ -8,8 +8,10 @@ use threaded_core::search::{Query, Sort};
 
 mod accept;
 mod m2;
+mod moderation;
 pub use accept::*;
 pub use m2::*;
+pub use moderation::*;
 
 pub use sqlx::Error;
 
@@ -60,11 +62,24 @@ pub struct StoryRow {
     pub locked: bool,
     pub at_uri: Option<String>,
     pub at_cid: Option<String>,
+    pub removed_at: Option<i64>,
+    pub removed_reason: Option<String>,
+    pub held_at: Option<i64>,
+    /// The short ID of the story this one was merged into.
+    pub merged_into: Option<String>,
+    pub locked_reason: Option<String>,
+    /// A moderator's edit is in force.
+    pub mod_edited: bool,
 }
 
 impl StoryRow {
     pub fn tag_list(&self) -> Vec<&str> {
         self.tags.split_whitespace().collect()
+    }
+
+    /// Removed, held, or merged: hidden from listings and from readers.
+    pub fn hidden(&self) -> bool {
+        self.removed_at.is_some() || self.held_at.is_some() || self.merged_into.is_some()
     }
 }
 
@@ -84,12 +99,16 @@ pub struct NewStory<'a> {
 const STORY_COLUMNS: &str =
     "s.id, s.short_id, s.title, s.url, s.domain, s.score, s.comment_count, \
      s.created_at, u.handle, s.body, s.user_id, u.did AS author_did, s.user_is_author, s.flags, \
-     s.edited_at, s.locked, s.at_uri, s.at_cid, \
+     s.edited_at, s.locked, s.at_uri, s.at_cid, s.removed_at, s.removed_reason, s.held_at, \
+     (SELECT m.short_id FROM stories m WHERE m.id = s.merged_into) AS merged_into, \
+     s.locked_reason, s.override_by IS NOT NULL AS mod_edited, \
      coalesce((SELECT group_concat(name, ' ') FROM \
          (SELECT t.name FROM taggings tg JOIN tags t ON t.id = tg.tag_id \
           WHERE tg.story_id = s.id ORDER BY t.name)), '') AS tags";
 
-const VISIBLE: &str = "s.deleted_at IS NULL AND s.merged_into IS NULL";
+/// Stories everyone may see: not deleted, merged, removed, or held.
+const VISIBLE: &str = "s.deleted_at IS NULL AND s.merged_into IS NULL \
+     AND s.removed_at IS NULL AND s.held_at IS NULL";
 
 impl Store {
     pub async fn open(path: &str) -> Result<Store> {
@@ -180,6 +199,18 @@ impl Store {
         let (_, short_id) = insert_story_tx(&mut tx, s).await?;
         tx.commit().await?;
         Ok(short_id)
+    }
+
+    /// A story that is not deleted, whatever its moderation state. The story
+    /// page decides who may see it.
+    pub async fn story_any(&self, short_id: &str) -> Result<Option<StoryRow>> {
+        sqlx::query_as(&format!(
+            "SELECT {STORY_COLUMNS} FROM stories s JOIN users u ON u.id = s.user_id \
+             WHERE s.short_id = ? AND s.deleted_at IS NULL"
+        ))
+        .bind(short_id)
+        .fetch_optional(&self.pool)
+        .await
     }
 
     pub async fn story(&self, short_id: &str) -> Result<Option<StoryRow>> {

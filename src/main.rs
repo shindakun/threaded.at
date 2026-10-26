@@ -4,13 +4,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use threaded_core::link;
 use threaded_store::{NewStory, Store};
 
-const USAGE: &str = "usage: threaded [serve | seed | keygen DIR | tag add NAME --description TEXT [--boost N] | tag list]
+const USAGE: &str = "usage: threaded [serve | seed | keygen DIR | tag add NAME --description TEXT [--boost N] | tag list
+                 | role grant DID moderator|admin | role revoke DID]
 
   serve       run the web server (default)
   seed        load demo tags and stories into the database
   keygen DIR  write a new OAuth signing key and cookie key into DIR
   tag add     create or update a tag
   tag list    list tags
+  role grant  make a signed-in account a moderator or admin; DID, not handle
+  role revoke return an account to a regular user
 
 environment:
   THREADED_DB          database URL (default sqlite:threaded.db)
@@ -36,6 +39,13 @@ async fn main() -> ExitCode {
         None | Some("serve") => serve(&db).await,
         Some("seed") => seed(&db).await,
         Some("tag") => match tag(&db, std::env::args().skip(2).collect()).await {
+            Err(e) if e.to_string() == "usage" => {
+                eprintln!("{USAGE}");
+                return ExitCode::from(2);
+            }
+            r => r,
+        },
+        Some("role") => match role(&db, std::env::args().skip(2).collect()).await {
             Err(e) if e.to_string() == "usage" => {
                 eprintln!("{USAGE}");
                 return ExitCode::from(2);
@@ -300,5 +310,48 @@ async fn tag(db: &str, args: Vec<String>) -> Result<(), BoxError> {
             Ok(())
         }
         _ => Err("usage".into()),
+    }
+}
+
+/// `role grant DID ROLE` and `role revoke DID`. Roles are keyed on the DID,
+/// which never changes hands; a handle can.
+async fn role(db: &str, args: Vec<String>) -> Result<(), BoxError> {
+    use threaded_store::{By, RoleChange, RoleName};
+
+    let (did, role) = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
+        ["grant", did, role] => (
+            did,
+            match RoleName::parse(role) {
+                Some(r @ (RoleName::Moderator | RoleName::Admin)) => r,
+                _ => return Err("the role is moderator or admin".into()),
+            },
+        ),
+        ["revoke", did] => (did, RoleName::User),
+        _ => return Err("usage".into()),
+    };
+    if !did.starts_with("did:") {
+        return Err(format!(
+            "{did:?} is not a DID; roles take a DID such as did:plc:..., not a handle"
+        )
+        .into());
+    }
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
+    let store = Store::open(db).await?;
+    match store
+        .set_role(did, role, By::Console, "From the console", now)
+        .await?
+    {
+        RoleChange::NoSuchUser => Err(format!(
+            "no account with DID {did} has signed in yet; sign in once, then grant the role"
+        )
+        .into()),
+        RoleChange::Unchanged => {
+            println!("{did} is already {}", role.as_str());
+            Ok(())
+        }
+        RoleChange::Changed { from } => {
+            println!("{did}: {from} to {}", role.as_str());
+            Ok(())
+        }
     }
 }

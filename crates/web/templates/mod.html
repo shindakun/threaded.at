@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Moderation | {{ site }}{% endblock %}
+{% block main %}
+<h1>Moderation</h1>
+<nav class="tabs" aria-label="Queue">
+  {% for t in tabs %}<a href="/mod?tab={{ t.key }}"{% if t.key == tab %} aria-current="page"{% endif %}>{{ t.label }} <span class="count">{{ t.count }}</span></a>{% endfor %}
+</nav>
+{% if rows.is_empty() %}
+<p class="empty">Nothing waiting.</p>
+{% else %}
+<ol class="queue">
+{% for r in rows %}
+<li><article class="queue-row" aria-labelledby="q-{{ r.short_id }}">
+  <h2 id="q-{{ r.short_id }}"><a href="{{ r.item_href() }}">{% if r.kind == "comment" %}Comment on {% endif %}{{ r.title }}</a></h2>
+  {% if !r.excerpt.is_empty() %}<p class="excerpt">{{ r.excerpt }}</p>{% endif %}
+  <p class="meta">by <a href="/mod/u/{{ r.author }}">{{ r.author }}</a>, karma {{ r.author_karma }}, here {{ r.tenure }} | {{ r.age }} | score {{ r.score }}</p>
+  {% if !r.flags.is_empty() %}<p class="meta">Flags: {% for f in r.flags %}{{ f.0 }} ({{ f.1 }}){% if !loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+  <p><a class="button-link" href="{{ r.review_href() }}">Review</a></p>
+</article></li>
+{% endfor %}
+</ol>
+{% endif %}
+<p><a href="/moderations">The public moderation log</a></p>
+{% endblock %}

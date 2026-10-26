@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Review {{ kind }} | {{ site }}{% endblock %}
+{% block main %}
+<h1>Review {{ kind }}</h1>
+{% if done %}<p class="notice" role="status">Done. The action is in the moderation log.</p>{% endif %}
+<article class="review-item" aria-labelledby="item-h">
+  <h2 id="item-h"><a href="{{ row.item_href() }}">{% if kind == "comment" %}Comment on {% endif %}{{ row.title }}</a></h2>
+  {% if let Some(u) = url %}<p class="meta">{{ u }}</p>{% endif %}
+  <p class="meta">by <a href="/mod/u/{{ row.author }}">{{ row.author }}</a>, karma {{ row.author_karma }}, here {{ row.tenure }} | {{ row.age }} | score {{ row.score }}</p>
+  {% if let Some(r) = removed %}<p class="mod-status">Removed: {{ r }}</p>{% endif %}
+  {% if held %}<p class="mod-status">Held for review by triage.</p>{% endif %}
+  {% if let Some(m) = merged_into %}<p class="mod-status">Merged into <a href="/s/{{ m }}">/s/{{ m }}</a>.</p>{% endif %}
+  {% if locked %}<p class="mod-status">Locked.</p>{% endif %}
+  {% if mod_edited %}<p class="mod-status">A moderator's edit is in force.</p>{% endif %}
+  {% if !body_html.is_empty() %}<div class="prose">{{ body_html|safe }}</div>{% endif %}
+</article>
+
+<h2>Flags</h2>
+{% if flags.is_empty() %}<p class="empty">No flags.</p>{% else %}
+<ul class="plain">{% for f in flags %}<li>{{ f.reason }} by <a href="/mod/u/{{ f.handle }}">{{ f.handle }}</a>, {{ f.age }}</li>{% endfor %}</ul>
+{% endif %}
+
+<h2>Earlier versions</h2>
+{% if revisions.is_empty() %}<p class="empty">Never edited.</p>{% else %}
+<ol class="plain">{% for r in revisions %}<li><p class="meta">Replaced {{ r.when }}</p>
+  {% if let Some(t) = r.title %}<p>Title: {{ t }}</p>{% endif %}
+  {% if let Some(u) = r.url %}<p>Link: {{ u }}</p>{% endif %}
+  {% if let Some(t) = r.tags %}<p>Tags: {{ t }}</p>{% endif %}
+  {% if !r.body.is_empty() %}<pre class="revision">{{ r.body }}</pre>{% endif %}
+</li>{% endfor %}</ol>
+{% endif %}
+
+<h2>Actions</h2>
+<p class="hint">Every reason appears in the public moderation log.</p>
+<div class="mod-actions">
+{% if removed.is_some() %}
+  {% call action("restore", "Restore", "") %}{% endcall %}
+{% else %}
+  {% call action("remove", "Remove", "") %}{% endcall %}
+{% endif %}
+{% if kind == "story" %}
+  {% if locked %}{% call action("unlock", "Unlock", "") %}{% endcall %}{% else %}{% call action("lock", "Lock", "No new comments, votes, or flags.") %}{% endcall %}{% endif %}
+  {% if merged_into.is_some() %}
+  {% call action("unmerge", "Unmerge", "Moves comments and votes back.") %}{% endcall %}
+  {% else %}
+  <form method="post" action="{{ action_url }}" class="post-form">
+    <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+    <input type="hidden" name="action" value="merge">
+    <h3>Merge</h3>
+    <label for="merge-into">Merge into story (its ID or /s/ link)</label>
+    <input id="merge-into" name="into" type="text" required>
+    <label for="merge-reason">Reason</label>
+    <input id="merge-reason" name="reason" type="text" required>
+    <button type="submit" class="secondary">Merge</button>
+  </form>
+  {% endif %}
+  <form method="post" action="{{ action_url }}" class="post-form">
+    <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+    <input type="hidden" name="action" value="edit">
+    <h3>Edit</h3>
+    <p class="hint">The author's later edits do not replace these.</p>
+    <label for="edit-title">Title</label>
+    <input id="edit-title" name="title" type="text" value="{{ row.title }}" maxlength="150" required>
+    <label for="edit-url">Link</label>
+    <input id="edit-url" name="url" type="url" value="{% if let Some(u) = url %}{{ u }}{% endif %}">
+    <fieldset class="tags-pick">
+      <legend>Tags</legend>
+      {% for t in tags %}<label><input type="checkbox" name="tags" value="{{ t.name }}"{% if t.checked %} checked{% endif %}> <span class="tag">{{ t.name }}</span></label>{% endfor %}
+    </fieldset>
+    <label for="edit-reason">Reason</label>
+    <input id="edit-reason" name="reason" type="text" required>
+    <button type="submit" class="secondary">Save edit</button>
+  </form>
+  {% if mod_edited %}{% call action("clear-edit", "Return to the author's version", "") %}{% endcall %}{% endif %}
+{% endif %}
+</div>
+
+<h2>Moderation log</h2>
+{% if log.is_empty() %}<p class="empty">No actions yet.</p>{% else %}
+<ol class="plain">{% for l in log %}<li>{{ l.when }}: {{ l.who }}, {{ l.action }}{% if !l.reason.is_empty() %}: {{ l.reason }}{% endif %}{% if !l.detail.is_empty() %} ({{ l.detail }}){% endif %}</li>{% endfor %}</ol>
+{% endif %}
+{% endblock %}
+
+{% macro action(name, label, hint) %}
+<form method="post" action="{{ action_url }}" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <input type="hidden" name="action" value="{{ name }}">
+  <h3>{{ label }}</h3>
+  {% if !hint.is_empty() %}<p class="hint">{{ hint }}</p>{% endif %}
+  <label for="reason-{{ name }}">Reason</label>
+  <input id="reason-{{ name }}" name="reason" type="text" required>
+  <button type="submit" class="secondary">{{ label }}</button>
+</form>
+{% endmacro %}
