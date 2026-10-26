@@ -498,6 +498,10 @@ A flag is a downvote with a reason:
 Every new submission and comment, from the web form or from hydrant, goes
 through triage after it is indexed. Triage never delays posting.
 
+Triage runs only when an Anthropic API key is configured. Without one, no
+model is called, nothing is held, and moderation runs on flags and moderators
+alone.
+
 | Verdict | Action |
 |---|---|
 | `spam` at `high` confidence | Held: hidden from listings, shown to its author as "held for review: spam (automated)", logged publicly, placed at the top of the queue |
