@@ -90,12 +90,15 @@ pub struct CommentRow {
     pub removed_at: Option<i64>,
     pub removed_reason: Option<String>,
     pub held_at: Option<i64>,
+    /// The network reports the author's account inactive.
+    pub author_inactive: bool,
 }
 
 impl CommentRow {
-    /// Removed or held: hidden from everyone but its author and moderators.
+    /// Removed, held, or by an inactive account: hidden from everyone but its
+    /// author and moderators.
     pub fn hidden(&self) -> bool {
-        self.removed_at.is_some() || self.held_at.is_some()
+        self.removed_at.is_some() || self.held_at.is_some() || self.author_inactive
     }
 }
 
@@ -104,7 +107,7 @@ pub(crate) const COMMENT_COLUMNS: &str =
      s.title AS story_title, c.parent_id, c.depth, c.body, c.score, c.flags, c.created_at, \
      c.edited_at, c.deleted_at, c.user_id, u.did AS author_did, \
      CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS handle, c.at_uri, c.at_cid, \
-     c.removed_at, c.removed_reason, c.held_at";
+     c.removed_at, c.removed_reason, c.held_at, u.inactive_at IS NOT NULL AS author_inactive";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Target {
@@ -635,6 +638,7 @@ impl Store {
             "SELECT {COMMENT_COLUMNS} FROM comments c JOIN users u ON u.id = c.user_id \
              JOIN stories s ON s.id = c.story_id \
              WHERE c.user_id = ? AND c.deleted_at IS NULL AND c.removed_at IS NULL AND c.held_at IS NULL \
+             AND u.inactive_at IS NULL \
              AND {VISIBLE} ORDER BY c.created_at DESC LIMIT ?"
         ))
         .bind(user_id)

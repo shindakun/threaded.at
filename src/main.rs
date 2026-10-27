@@ -202,17 +202,56 @@ async fn serve(db: &str) -> Result<(), BoxError> {
     }
     match env("THREADED_HYDRANT_SOCKET") {
         Some(socket) => {
+            let hydrant = threaded_indexer::client::Hydrant::new(&socket);
+            state.hydrant = Some(hydrant.clone());
             let prefix = state.auth.clients.ns.prefix();
             let policy = state.policy.clone();
             let triage = state.clone();
             let indexer = threaded_indexer::Indexer::new(
                 state.store.clone(),
-                threaded_indexer::client::Hydrant::new(&socket),
+                hydrant.clone(),
                 threaded_indexer::apply::Collections::under(prefix),
                 std::sync::Arc::new(move || policy.read().map(|p| p.clone()).unwrap_or_default()),
                 std::sync::Arc::new(move || triage.triage_on()),
                 std::sync::Arc::new(unix_now),
+                {
+                    let clients = state.auth.clients.clone();
+                    std::sync::Arc::new(move |did: String| {
+                        let clients = clients.clone();
+                        Box::pin(async move {
+                            use threaded_auth::flow::{check_handle_of, HandleCheck};
+                            match check_handle_of(&clients, &did).await {
+                                HandleCheck::Verified(h) => {
+                                    threaded_store::CheckedHandle::Verified(h)
+                                }
+                                HandleCheck::Unverified => {
+                                    threaded_store::CheckedHandle::Unverified
+                                }
+                                HandleCheck::Failed => threaded_store::CheckedHandle::Failed,
+                            }
+                        })
+                    })
+                },
             );
+            // Every signed-in account, so their public votes arrive. hydrant
+            // may start after Threaded, so keep trying until it answers.
+            {
+                let (store, hydrant) = (state.store.clone(), hydrant.clone());
+                tokio::spawn(async move {
+                    loop {
+                        match threaded_indexer::consumer::track_signed_in(&store, &hydrant).await {
+                            Ok(queued) => {
+                                tracing::info!(queued, "tracked signed-in accounts in hydrant");
+                                break;
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "tracking signed-in accounts in hydrant; retrying in a minute");
+                                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                            }
+                        }
+                    }
+                });
+            }
             tracing::info!(socket, records = prefix, "reading records from hydrant");
             tokio::spawn(indexer.run());
         }

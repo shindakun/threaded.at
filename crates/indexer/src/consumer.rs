@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use threaded_core::policy::Policy;
-use threaded_store::Store;
+use threaded_store::{CheckedHandle, Store};
 
 use crate::apply::{apply, Applied, Collections, Settings};
 use crate::client::{Event, Hydrant, RecordEvent};
@@ -24,6 +24,12 @@ const BACKOFF_MIN: Duration = Duration::from_secs(1);
 const BACKOFF_MAX: Duration = Duration::from_secs(60);
 
 pub type PolicyFn = Arc<dyn Fn() -> Policy + Send + Sync>;
+/// Checks a DID's handle both ways, as sign-in does.
+pub type CheckFn = Arc<
+    dyn Fn(String) -> std::pin::Pin<Box<dyn std::future::Future<Output = CheckedHandle> + Send>>
+        + Send
+        + Sync,
+>;
 pub type FlagFn = Arc<dyn Fn() -> bool + Send + Sync>;
 pub type ClockFn = Arc<dyn Fn() -> i64 + Send + Sync>;
 
@@ -36,6 +42,8 @@ pub struct Indexer {
     /// Whether AI triage is on.
     pub triage: FlagFn,
     pub clock: ClockFn,
+    /// Checks a handle when an identity event says it changed.
+    pub check_handle: CheckFn,
     last_expired: AtomicI64,
 }
 
@@ -47,6 +55,7 @@ impl Indexer {
         policy: PolicyFn,
         triage: FlagFn,
         clock: ClockFn,
+        check_handle: CheckFn,
     ) -> Indexer {
         Indexer {
             store,
@@ -55,6 +64,7 @@ impl Indexer {
             policy,
             triage,
             clock,
+            check_handle,
             last_expired: AtomicI64::new(0),
         }
     }
@@ -64,8 +74,31 @@ impl Indexer {
         let now = (self.clock)();
         match event {
             Event::Record { record, .. } => self.apply_record(record, now).await?,
-            // Identity and account events are applied from task 5 of M4 on.
-            Event::Identity { .. } | Event::Account { .. } => {}
+            Event::Identity { identity, .. } => {
+                // hydrant's handle is a hint; the handle is checked here both
+                // ways before it is shown, as at sign-in.
+                if self.store.user_by_did(&identity.did).await?.is_some() {
+                    let found = (self.check_handle)(identity.did.clone()).await;
+                    tracing::info!(did = identity.did, ?found, "identity changed");
+                    self.store
+                        .record_handle_check(&identity.did, &found, now)
+                        .await?;
+                }
+            }
+            Event::Account { account, .. } => {
+                let changed = self
+                    .store
+                    .set_account_active(
+                        &account.did,
+                        account.active,
+                        account.status.as_deref(),
+                        now,
+                    )
+                    .await?;
+                if changed {
+                    tracing::info!(did = account.did, active = account.active, status = ?account.status, "account state changed");
+                }
+            }
         }
         self.store.set_stream_cursor(event.id() + 1, now).await?;
         self.expire(now).await
@@ -192,4 +225,13 @@ fn log(uri: &str, outcome: &Applied) {
         }
         other => tracing::debug!(uri, ?other, "applied"),
     }
+}
+
+/// Tracks every DID that has signed in here, so hydrant sends their public
+/// votes even if they never post. Returns how many hydrant newly queued.
+pub async fn track_signed_in(store: &Store, hydrant: &Hydrant) -> Result<usize, String> {
+    let dids = store.signed_in_dids().await.map_err(|e| e.to_string())?;
+    let refs: Vec<&str> = dids.iter().map(String::as_str).collect();
+    let queued = hydrant.track(&refs).await.map_err(|e| e.to_string())?;
+    Ok(queued.len())
 }

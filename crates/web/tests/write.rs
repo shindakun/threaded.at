@@ -682,3 +682,46 @@ async fn a_failed_index_removes_the_new_record() {
         vec![("create", "m0".to_string()), ("delete", "m0".to_string())]
     );
 }
+
+#[tokio::test]
+async fn an_inactive_authors_story_hides_from_readers_and_says_why_to_the_author() {
+    let w = world().await;
+    let alice = w.user("alice.example", &base(), 100, 0).await;
+    let reader = w.user("bob.example", &base(), 100, 0).await;
+    let id = w
+        .submit(
+            &alice,
+            "Before deactivating",
+            "https://e.example/i",
+            &["rust"],
+        )
+        .await;
+    w.store
+        .set_account_active("did:plc:alice", false, Some("deactivated"), NOW)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        w.get(&format!("/s/{id}"), &reader).await.status,
+        StatusCode::NOT_FOUND
+    );
+    assert!(!w
+        .get("/", &reader)
+        .await
+        .body
+        .contains("Before deactivating"));
+    let own = w.get(&format!("/s/{id}"), &alice).await.body;
+    assert!(
+        own.contains("Hidden while the network reports this account inactive"),
+        "{own}"
+    );
+
+    w.store
+        .set_account_active("did:plc:alice", true, None, NOW)
+        .await
+        .unwrap();
+    assert_eq!(
+        w.get(&format!("/s/{id}"), &reader).await.status,
+        StatusCode::OK
+    );
+}

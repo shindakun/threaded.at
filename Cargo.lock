@@ -4187,6 +4187,7 @@ dependencies = [
  "tempfile",
  "threaded-auth",
  "threaded-core",
+ "threaded-indexer",
  "threaded-store",
  "threaded-triage",
  "time",

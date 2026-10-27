@@ -17,6 +17,7 @@ serde-saphyr = "2.0.0"
 serde_json = "1.0.154"
 threaded-auth = { version = "0.1.0", path = "../auth" }
 threaded-core = { version = "0.1.0", path = "../core" }
+threaded-indexer = { version = "0.1.0", path = "../indexer" }
 threaded-store = { version = "0.1.0", path = "../store" }
 time = "0.3"
 tokio = { version = "1", features = ["time"] }

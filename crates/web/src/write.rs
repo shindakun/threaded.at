@@ -194,8 +194,15 @@ struct StoryPage {
 }
 
 /// Why an item is hidden, worded for its author.
-fn hidden_status(removed_reason: Option<&str>, removed: bool, held: bool) -> Option<String> {
-    if removed {
+fn hidden_status(
+    removed_reason: Option<&str>,
+    removed: bool,
+    held: bool,
+    author_inactive: bool,
+) -> Option<String> {
+    if author_inactive {
+        Some("Hidden while the network reports this account inactive".to_string())
+    } else if removed {
         Some(format!(
             "Removed by a moderator: {}",
             removed_reason.unwrap_or("no reason given")
@@ -374,6 +381,7 @@ pub async fn story_page(
         row.removed_reason.as_deref(),
         row.removed_at.is_some(),
         row.held_at.is_some(),
+        row.author_inactive,
     );
     let mut s = StoryView::from_row(row.clone(), now);
     prepare_rows(&st, &viewer, std::slice::from_mut(&mut s)).await?;
@@ -511,6 +519,7 @@ async fn build_thread(
                     c.removed_reason.as_deref(),
                     c.removed_at.is_some(),
                     c.held_at.is_some(),
+                    c.author_inactive,
                 )
             },
             edited: c.edited_at.is_some(),

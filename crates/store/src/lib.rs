@@ -78,6 +78,8 @@ pub struct StoryRow {
     pub mod_edited: bool,
     /// The link changed after the edit window; hidden for moderators.
     pub detached_at: Option<i64>,
+    /// The network reports the author's account inactive.
+    pub author_inactive: bool,
 }
 
 impl StoryRow {
@@ -91,6 +93,7 @@ impl StoryRow {
             || self.held_at.is_some()
             || self.merged_into.is_some()
             || self.detached_at.is_some()
+            || self.author_inactive
     }
 }
 
@@ -113,13 +116,16 @@ pub(crate) const STORY_COLUMNS: &str =
      s.edited_at, s.locked, s.at_uri, s.at_cid, s.removed_at, s.removed_reason, s.held_at, \
      (SELECT m.short_id FROM stories m WHERE m.id = s.merged_into) AS merged_into, \
      s.locked_reason, s.override_by IS NOT NULL AS mod_edited, s.detached_at, \
+     u.inactive_at IS NOT NULL AS author_inactive, \
      coalesce((SELECT group_concat(name, ' ') FROM \
          (SELECT t.name FROM taggings tg JOIN tags t ON t.id = tg.tag_id \
           WHERE tg.story_id = s.id ORDER BY t.name)), '') AS tags";
 
-/// Stories everyone may see: not deleted, merged, removed, held, or detached.
+/// Stories everyone may see: not deleted, merged, removed, held, or
+/// detached, by an account the network reports active.
 const VISIBLE: &str = "s.deleted_at IS NULL AND s.merged_into IS NULL \
-     AND s.removed_at IS NULL AND s.held_at IS NULL AND s.detached_at IS NULL";
+     AND s.removed_at IS NULL AND s.held_at IS NULL AND s.detached_at IS NULL \
+     AND NOT EXISTS (SELECT 1 FROM users x WHERE x.id = s.user_id AND x.inactive_at IS NOT NULL)";
 
 impl Store {
     pub async fn open(path: &str) -> Result<Store> {
@@ -175,7 +181,7 @@ impl Store {
         .bind(now)
         .fetch_one(&mut *tx)
         .await?;
-        claim_handle(&mut tx, did, handle, verified).await?;
+        claim_handle(&mut tx, did, handle, verified, now).await?;
         tx.commit().await?;
         Ok(id)
     }
@@ -452,6 +458,7 @@ pub(crate) async fn claim_handle(
     did: &str,
     handle: &str,
     verified: bool,
+    now: i64,
 ) -> Result<()> {
     if verified {
         sqlx::query(
@@ -459,6 +466,18 @@ pub(crate) async fn claim_handle(
         )
         .bind(handle)
         .bind(did)
+        .execute(&mut **tx)
+        .await?;
+        // Handle history: a row whenever the verified handle differs from
+        // the last one recorded for this account.
+        sqlx::query(
+            "INSERT INTO handle_history (user_id, handle, seen_at) \
+             SELECT u.id, ?2, ?3 FROM users u WHERE u.did = ?1 AND ?2 IS NOT \
+             (SELECT h.handle FROM handle_history h WHERE h.user_id = u.id ORDER BY h.seen_at DESC, h.id DESC LIMIT 1)",
+        )
+        .bind(did)
+        .bind(handle)
+        .bind(now)
         .execute(&mut **tx)
         .await?;
     }

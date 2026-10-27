@@ -185,3 +185,53 @@ impl Store {
         Ok(r.rows_affected())
     }
 }
+
+impl Store {
+    /// Applies an account event: an inactive account (deactivated, taken
+    /// down, deleted) is hidden until the network reports it active again.
+    /// Returns whether anything changed; unknown DIDs change nothing.
+    pub async fn set_account_active(
+        &self,
+        did: &str,
+        active: bool,
+        status: Option<&str>,
+        now: i64,
+    ) -> Result<bool> {
+        let r = if active {
+            sqlx::query(
+                "UPDATE users SET inactive_at = NULL, inactive_status = NULL \
+                 WHERE did = ? AND inactive_at IS NOT NULL",
+            )
+            .bind(did)
+            .execute(self.pool())
+            .await?
+        } else {
+            sqlx::query(
+                "UPDATE users SET inactive_at = coalesce(inactive_at, ?), inactive_status = ? WHERE did = ?",
+            )
+            .bind(now)
+            .bind(status)
+            .bind(did)
+            .execute(self.pool())
+            .await?
+        };
+        Ok(r.rows_affected() > 0)
+    }
+
+    /// Every DID that has signed in here, for tracking in hydrant.
+    pub async fn signed_in_dids(&self) -> Result<Vec<String>> {
+        sqlx::query_scalar("SELECT did FROM users WHERE last_seen_at IS NOT NULL ORDER BY id")
+            .fetch_all(self.pool())
+            .await
+    }
+
+    /// Handles an account has held, newest first.
+    pub async fn handle_history(&self, user_id: i64) -> Result<Vec<(String, i64)>> {
+        sqlx::query_as(
+            "SELECT handle, seen_at FROM handle_history WHERE user_id = ? ORDER BY seen_at DESC, id DESC",
+        )
+        .bind(user_id)
+        .fetch_all(self.pool())
+        .await
+    }
+}

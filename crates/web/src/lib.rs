@@ -35,6 +35,8 @@ pub struct AppState {
     pub writer: threaded_auth::records::Writer,
     /// Where background handle checks go.
     pub handles: handles::HandleChecker,
+    /// hydrant's API, when the indexer is on; sign-in tracks the account.
+    pub hydrant: Option<threaded_indexer::client::Hydrant>,
     pub clock: Arc<dyn Fn() -> i64 + Send + Sync>,
     /// The rules in force. Admins change them at runtime.
     pub policy: Arc<std::sync::RwLock<threaded_core::policy::Policy>>,
@@ -54,6 +56,7 @@ impl AppState {
             auth: Arc::new(auth),
             writer,
             handles,
+            hydrant: None,
             clock: Arc::new(|| {
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)

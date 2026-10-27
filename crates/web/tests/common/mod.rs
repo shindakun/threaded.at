@@ -29,6 +29,7 @@ pub fn state(
         // Tests never look handles up on the network; with no answer set, a
         // check fails and keeps the stored handle.
         handles: threaded_web::handles::HandleChecker::Fixed(Default::default()),
+        hydrant: None,
         clock: Arc::new(move || now),
         policy: Default::default(),
         triage_key: false,

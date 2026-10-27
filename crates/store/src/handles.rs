@@ -80,7 +80,7 @@ impl Store {
                 .bind(did)
                 .execute(&mut *tx)
                 .await?;
-                claim_handle(&mut tx, did, handle, true).await?;
+                claim_handle(&mut tx, did, handle, true, now).await?;
             }
             CheckedHandle::Unverified => {
                 sqlx::query(

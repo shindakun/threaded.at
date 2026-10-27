@@ -481,6 +481,16 @@ pub async fn callback(
             st.store
                 .record_sign_in(&si.did, &shown, verified, now())
                 .await?;
+            // Track the account in hydrant, so its public votes arrive even
+            // if it never posts. In the background: sign-in never waits on it.
+            if let Some(h) = st.hydrant.clone() {
+                let did = si.did.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = h.track(&[&did]).await {
+                        tracing::warn!(error = %e, did, "tracking a signed-in account in hydrant");
+                    }
+                });
+            }
             let next = jar
                 .get(&st.auth.name("return"))
                 .map(|c| safe_next(c.value()))
