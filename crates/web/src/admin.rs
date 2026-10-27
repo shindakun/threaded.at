@@ -27,10 +27,56 @@ struct HomePage {
     flagged: usize,
     holds: usize,
     suggestions: usize,
+    detached: usize,
     stats: TriageStats,
     precision: Option<String>,
     floor: String,
     breaker_open: bool,
+    indexer: IndexerView,
+}
+
+/// The indexer as the health page shows it.
+pub struct IndexerView {
+    pub state: String,
+    pub head: Option<u64>,
+    pub next: Option<u64>,
+    /// Events between the cursor and hydrant's newest. Event IDs can skip,
+    /// so this is an upper bound.
+    pub behind: Option<u64>,
+    pub moved: Option<String>,
+    pub pending: i64,
+}
+
+/// How long `/admin` waits for hydrant before showing it as not answering.
+const HYDRANT_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+async fn indexer_view(st: &AppState) -> Result<IndexerView, AppError> {
+    let now = (st.clock)();
+    let s = st.store.indexer_state().await?;
+    let mut v = IndexerView {
+        state: String::new(),
+        head: None,
+        next: s.next_id,
+        behind: None,
+        moved: s.updated_at.map(|t| crate::ago(now - t)),
+        pending: s.pending,
+    };
+    let Some(h) = &st.hydrant else {
+        v.state =
+            "Off: THREADED_HYDRANT_SOCKET is not set, so only records written here are indexed."
+                .into();
+        return Ok(v);
+    };
+    match tokio::time::timeout(HYDRANT_WAIT, h.stream_head()).await {
+        Ok(Ok(head)) => {
+            v.state = "On.".into();
+            v.head = head;
+            v.behind = head.map(|h| (h + 1).saturating_sub(s.next_id.unwrap_or(0)));
+        }
+        Ok(Err(e)) => v.state = format!("hydrant did not answer: {e}."),
+        Err(_) => v.state = "hydrant did not answer within 2 seconds.".into(),
+    }
+    Ok(v)
 }
 
 pub async fn home(State(st): State<AppState>, viewer: Viewer, Query(q): Query<DoneQuery>) -> Page {
@@ -56,10 +102,12 @@ pub async fn home(State(st): State<AppState>, viewer: Viewer, Query(q): Query<Do
             flagged,
             holds: st.store.holds().await?.len(),
             suggestions: st.store.triage_suggestions().await?.len(),
+            detached: st.store.detached().await?.len(),
             precision: stats.hold_precision().map(|p| format!("{:.0}%", p * 100.0)),
             floor: format!("{:.0}%", policy.hold_precision_floor * 100.0),
             breaker_open: stats.breaker_open(policy.hold_precision_floor),
             stats,
+            indexer: indexer_view(&st).await?,
         }
         .render()?,
     ))

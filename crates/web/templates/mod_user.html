@@ -16,6 +16,17 @@
 </dl>
 <p><a href="/u/{{ did }}">Public profile</a></p>
 
+<h2>Identity</h2>
+<dl class="facts">
+  <dt>Handle</dt><dd>{% if handle_verified %}{{ handle }}, verified{% else %}none verified; the DID shows instead{% endif %}</dd>
+  <dt>PDS</dt><dd>{% match pds %}{% when Found::Yes(h) %}{{ h }}{% when Found::No %}hydrant does not know this account{% when Found::NotApplicable %}not known{% when Found::Failed(e) %}{{ e }}{% endmatch %}</dd>
+  <dt>Account created</dt><dd>{% match created %}{% when Found::Yes(c) %}{{ c }}, from the PLC directory{% when Found::No %}the PLC directory does not know this DID{% when Found::NotApplicable %}not known: only a did:plc has a creation time{% when Found::Failed(e) %}{{ e }}{% endmatch %}</dd>
+</dl>
+<h3>Handle history</h3>
+{% if handle_history.is_empty() %}<p class="empty">No verified handle recorded.</p>{% else %}
+<ol class="plain">{% for (h, when) in handle_history %}<li>{{ h }} <span class="meta">from {{ when }}</span></li>{% endfor %}</ol>
+{% endif %}
+
 <h2>Notes</h2>
 <p class="hint">Private to moderators. Notes are not logged.</p>
 <form method="post" action="/mod/u/{{ did }}" class="post-form">

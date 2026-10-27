@@ -19,7 +19,7 @@ threaded-auth = { version = "0.1.0", path = "../auth" }
 threaded-core = { version = "0.1.0", path = "../core" }
 threaded-indexer = { version = "0.1.0", path = "../indexer" }
 threaded-store = { version = "0.1.0", path = "../store" }
-time = "0.3"
+time = { version = "0.3", features = ["parsing"] }
 tokio = { version = "1", features = ["time"] }
 tower-http = { version = "0.6", features = ["catch-panic"] }
 tracing = "0.1.44"
@@ -33,6 +33,6 @@ sqlx = { version = "0.8.6", default-features = false, features = ["sqlite", "run
 tempfile = "3.27.0"
 threaded-auth = { path = "../auth" }
 threaded-triage = { path = "../triage" }
-tokio = { version = "1.54.1", features = ["rt", "macros"] }
+tokio = { version = "1.54.1", features = ["rt", "macros", "net"] }
 tower = { version = "0.5", features = ["util"] }
 tracing-subscriber = { version = "0.3.23", features = ["fmt"] }

@@ -5,7 +5,7 @@
 //! usage: a11y_fixture DB_URL COOKIE_KEY_FILE
 
 use threaded_auth::client::{scopes, Flow, Namespace};
-use threaded_store::{By, NewComment, NewStory, NewVerdict, Store, Target, VoteChange};
+use threaded_store::{By, NewComment, NewStory, NewVerdict, Store, StoryEdit, Target, VoteChange};
 
 const DAY: i64 = 86_400;
 
@@ -232,6 +232,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
             .await?;
     }
+    // A story whose author changed its link after the edit window.
+    let link4 = threaded_core::link::parse("https://e.example/a11y-before")?;
+    let moved = store
+        .insert_story(&NewStory {
+            user_id: other,
+            title: "A detached story",
+            link: Some(&link4),
+            body: "",
+            user_is_author: true,
+            tags: &["rust"],
+            created_at: now - 2 * DAY,
+            record: None,
+        })
+        .await?;
+    let moved_row = store.story(&moved).await?.ok_or("story missing")?;
+    let link5 = threaded_core::link::parse("https://e.example/a11y-after")?;
+    store
+        .detach_story(
+            &moved_row,
+            &StoryEdit {
+                title: "A detached story",
+                link: Some(&link5),
+                body: "",
+                tags: &["rust"],
+                cid: None,
+            },
+            now,
+        )
+        .await?;
     sqlx::query("UPDATE users SET karma = 50 WHERE id = ?")
         .bind(me)
         .execute(store.pool())
@@ -244,7 +273,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         format!("{did} {sid} votes"),
     ));
     println!(
-        "threaded={} {story} {top} {theirs}",
+        "threaded={} {story} {top} {theirs} {moved}",
         jar.get("threaded").ok_or("cookie")?.value()
     );
     Ok(())

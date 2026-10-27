@@ -5,12 +5,14 @@ use sqlx::{Sqlite, Transaction};
 
 use crate::{Result, Store};
 
-/// Who acted. Triage and the console have no user row.
+/// Who acted. Triage, the console, and the indexer have no user row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum By {
     Moderator(i64),
     Triage,
     Console,
+    /// The stream consumer, acting on a record the author changed.
+    Indexer,
 }
 
 impl By {
@@ -19,6 +21,7 @@ impl By {
             By::Moderator(_) => "moderator",
             By::Triage => "triage",
             By::Console => "console",
+            By::Indexer => "indexer",
         }
     }
 
@@ -921,7 +924,7 @@ pub struct QueueItem {
     pub created_at: i64,
 }
 
-const QUEUE_STORY: &str =
+pub(crate) const QUEUE_STORY: &str =
     "SELECT 'story' AS kind, s.id, s.short_id, s.short_id AS story_short_id, \
      s.title, s.body, s.url, s.user_id AS author_id, CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS author, u.did AS author_did, u.karma AS author_karma, \
      u.created_at AS author_since, s.score, s.flags, s.created_at \

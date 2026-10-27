@@ -30,6 +30,8 @@ pub fn state(
         // check fails and keeps the stored handle.
         handles: threaded_web::handles::HandleChecker::Fixed(Default::default()),
         hydrant: None,
+        // Nor the PLC directory: every DID is unknown unless a test says.
+        plc: threaded_web::identity::Plc::Fixed(Default::default()),
         clock: Arc::new(move || now),
         policy: Default::default(),
         triage_key: false,

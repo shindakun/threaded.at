@@ -2,7 +2,11 @@
 //! accounts known only from the network, and detached stories.
 
 use crate::m2::{COMMENT_COLUMNS, USER_COLUMNS};
-use crate::{CommentRow, Result, Store, StoryEdit, StoryRow, Target, UserRow, STORY_COLUMNS};
+use crate::moderation::{log, QUEUE_STORY};
+use crate::{
+    By, CommentRow, LogEntry, ModError, Outcome, QueueItem, Result, Store, StoryEdit, StoryRow,
+    Target, UserRow, STORY_COLUMNS,
+};
 
 /// An upvote or flag found by the AT-URI of its published record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::FromRow)]
@@ -84,17 +88,122 @@ impl Store {
     }
 
     /// Applies an author's edit that changed the link after the edit window,
-    /// then hides the story for moderators. The prior version is kept in
-    /// `story_revisions`, as for any edit.
+    /// then hides the story until a moderator reattaches or removes it. The
+    /// prior version is kept in `story_revisions`, as for any edit, and the
+    /// detach is in the public log.
     pub async fn detach_story(&self, story: &StoryRow, e: &StoryEdit<'_>, now: i64) -> Result<()> {
-        self.edit_story(story, e, now).await?;
+        let mut tx = self.pool().begin().await?;
+        // The author's own link, which a moderator's edit may be covering.
+        let old_url: Option<String> = if story.mod_edited {
+            sqlx::query_scalar("SELECT author_url FROM stories WHERE id = ?")
+                .bind(story.id)
+                .fetch_one(&mut *tx)
+                .await?
+        } else {
+            story.url.clone()
+        };
+        crate::m2::edit_story_tx(&mut tx, story, e, now).await?;
         sqlx::query("UPDATE stories SET detached_at = ? WHERE id = ?")
             .bind(now)
             .bind(story.id)
-            .execute(self.pool())
+            .execute(&mut *tx)
             .await?;
-        Ok(())
+        let new_url = e.link.map(|l| l.url.as_str()).unwrap_or("no link");
+        let detail = format!(
+            "from {} to {new_url}",
+            old_url.as_deref().unwrap_or("no link")
+        );
+        log(
+            &mut tx,
+            By::Indexer,
+            &LogEntry {
+                action: "detach story",
+                user_id: Some(story.user_id),
+                story_id: Some(story.id),
+                reason: "The author changed the link after the edit window.",
+                detail: &detail,
+                ..Default::default()
+            },
+            now,
+        )
+        .await?;
+        tx.commit().await
     }
+
+    /// Puts a detached story back with its new link.
+    pub async fn reattach_story(
+        &self,
+        story_id: i64,
+        by: By,
+        reason: &str,
+        now: i64,
+    ) -> Result<Outcome> {
+        if reason.trim().is_empty() {
+            return Ok(Err(ModError::NoReason));
+        }
+        let mut tx = self.pool().begin().await?;
+        let author: Option<i64> = sqlx::query_scalar(
+            "UPDATE stories SET detached_at = NULL \
+             WHERE id = ? AND detached_at IS NOT NULL AND deleted_at IS NULL RETURNING user_id",
+        )
+        .bind(story_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(author) = author else {
+            return Ok(Err(ModError::Refused("It is not detached.")));
+        };
+        log(
+            &mut tx,
+            by,
+            &LogEntry {
+                action: "reattach story",
+                user_id: Some(author),
+                story_id: Some(story_id),
+                reason: reason.trim(),
+                ..Default::default()
+            },
+            now,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(Ok(()))
+    }
+
+    /// Detached stories not yet removed or deleted, oldest first.
+    pub async fn detached(&self) -> Result<Vec<DetachedItem>> {
+        sqlx::query_as(&format!(
+            "SELECT q.*, s.detached_at, \
+             (SELECT l.detail FROM mod_log l WHERE l.story_id = s.id \
+              AND l.action = 'detach story' ORDER BY l.id DESC LIMIT 1) AS change \
+             FROM ({QUEUE_STORY}) q JOIN stories s ON s.id = q.id \
+             WHERE s.detached_at IS NOT NULL AND s.deleted_at IS NULL \
+             AND s.removed_at IS NULL AND s.merged_into IS NULL \
+             ORDER BY s.detached_at, s.id"
+        ))
+        .fetch_all(self.pool())
+        .await
+    }
+}
+
+/// A row in the Detached tab: the story, and how its link changed.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct DetachedItem {
+    #[sqlx(flatten)]
+    pub item: QueueItem,
+    pub detached_at: i64,
+    /// The latest detach's log detail: "from OLD to NEW".
+    pub change: Option<String>,
+}
+
+/// The consumer's position in hydrant's stream.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct IndexerState {
+    /// The next event ID to read, or `None` before the first event.
+    pub next_id: Option<u64>,
+    /// When the cursor last moved.
+    pub updated_at: Option<i64>,
+    /// Records waiting for the story or comment they refer to.
+    pub pending: i64,
 }
 
 /// A record waiting for the story or comment it refers to.
@@ -114,6 +223,22 @@ impl Store {
                 .fetch_optional(self.pool())
                 .await?;
         Ok(next.map(|n| n as u64))
+    }
+
+    /// Where the consumer is, for `/admin`.
+    pub async fn indexer_state(&self) -> Result<IndexerState> {
+        let cursor: Option<(i64, i64)> =
+            sqlx::query_as("SELECT next_id, updated_at FROM stream_cursor WHERE id = 1")
+                .fetch_optional(self.pool())
+                .await?;
+        let pending: i64 = sqlx::query_scalar("SELECT count(*) FROM pending_records")
+            .fetch_one(self.pool())
+            .await?;
+        Ok(IndexerState {
+            next_id: cursor.map(|c| c.0 as u64),
+            updated_at: cursor.map(|c| c.1),
+            pending,
+        })
     }
 
     pub async fn set_stream_cursor(&self, next: u64, now: i64) -> Result<()> {

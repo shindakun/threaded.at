@@ -47,7 +47,7 @@ bin=target/debug/threaded
 "$bin" seed >/dev/null 2>&1
 # Signed-in session cookie, then the fixture story and comment IDs.
 set -- $(target/debug/examples/a11y_fixture "$THREADED_DB" "$THREADED_COOKIE_KEY")
-cookie=$1 sid=$2 mine=/s/$2 comment=$3 theirs=$4
+cookie=$1 sid=$2 mine=/s/$2 comment=$3 theirs=$4 detached=$5
 "$bin" serve >"$tmp/serve.log" 2>&1 &
 pid=$!
 trap 'rc=$?; kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null || true; rm -rf "$tmp"; exit $rc' EXIT
@@ -68,10 +68,11 @@ curl -fs -H "Cookie: $cookie" "$base/settings" | grep -q 'href="/u/a11y.example"
 # The same for staff pages: a 403 page would pass the audit too.
 curl -fs -H "Cookie: $cookie" "$base/admin" >/dev/null || { echo "fixture user cannot open /admin"; exit 1; }
 curl -fs -H "Cookie: $cookie" "$base/mod" | grep -q 'class="queue-row"' || { echo "the moderation queue is empty or closed"; exit 1; }
-for tab in edits holds suggestions; do
+for tab in edits holds suggestions detached; do
   curl -fs -H "Cookie: $cookie" "$base/mod?tab=$tab" | grep -q 'class="queue-row"' || { echo "the $tab tab is empty"; exit 1; }
 done
 curl -fs -H "Cookie: $cookie" "$base/s/$theirs/suggest" >/dev/null || { echo "the suggest page refused the fixture user"; exit 1; }
 A11Y_COOKIE="$cookie" node "$here/audit.mjs" "$base" / "$mine" "$mine/edit" /submit "/c/$comment/reply" "/c/$comment/edit" /settings /u/a11y.example /u/other.example \
   /mod "/mod/s/$sid" /mod/c/"$comment" /mod/u/did:plc:a11yother /moderations /admin /admin/settings /admin/tags /admin/people \
-  "/mod?tab=edits" "/s/$theirs/suggest" "/mod?tab=holds" "/mod?tab=suggestions" /admin/rules /moderations/stats
+  "/mod?tab=edits" "/s/$theirs/suggest" "/mod?tab=holds" "/mod?tab=suggestions" /admin/rules /moderations/stats \
+  "/mod?tab=detached" "/mod/s/$detached"

@@ -470,68 +470,8 @@ impl Store {
     /// Replaces a story's title, body, tags, and (within the edit window) URL,
     /// keeping the prior version in `story_revisions`.
     pub async fn edit_story(&self, story: &StoryRow, e: &StoryEdit<'_>, now: i64) -> Result<()> {
-        let StoryEdit {
-            title,
-            link,
-            body,
-            tags,
-            cid,
-        } = *e;
         let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO story_revisions (story_id, title, url, body, tags, at_cid, edited_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-            .bind(story.id)
-            .bind(&story.title)
-            .bind(&story.url)
-            .bind(&story.body)
-            .bind(&story.tags)
-            .bind(&story.at_cid)
-            .bind(now)
-            .execute(&mut *tx)
-            .await?;
-        if story.mod_edited {
-            // A moderator's title, URL, and tags stay in force; the author's
-            // own values change underneath them.
-            sqlx::query(
-                "UPDATE stories SET author_title = ?, author_url = ?, author_tags = ?, body = ?, \
-                 at_cid = coalesce(?, at_cid), edited_at = ? WHERE id = ?",
-            )
-            .bind(title)
-            .bind(link.map(|l| l.url.as_str()))
-            .bind(tags.join(" "))
-            .bind(body)
-            .bind(cid)
-            .bind(now)
-            .bind(story.id)
-            .execute(&mut *tx)
-            .await?;
-            return tx.commit().await;
-        }
-        sqlx::query(
-            "UPDATE stories SET title = ?, url = ?, canonical_url = ?, domain = ?, body = ?, \
-             at_cid = coalesce(?, at_cid), edited_at = ? WHERE id = ?",
-        )
-        .bind(title)
-        .bind(link.map(|l| l.url.as_str()))
-        .bind(link.map(|l| l.canonical.as_str()))
-        .bind(link.map(|l| l.domain.as_str()))
-        .bind(body)
-        .bind(cid)
-        .bind(now)
-        .bind(story.id)
-        .execute(&mut *tx)
-        .await?;
-        sqlx::query("DELETE FROM taggings WHERE story_id = ?")
-            .bind(story.id)
-            .execute(&mut *tx)
-            .await?;
-        for name in tags {
-            sqlx::query("INSERT INTO taggings (story_id, tag_id) SELECT ?, id FROM tags WHERE name = ? AND active = 1")
-                .bind(story.id)
-                .bind(name)
-                .execute(&mut *tx)
-                .await?;
-        }
-        recompute_rank(&mut tx, story.id).await?;
+        edit_story_tx(&mut tx, story, e, now).await?;
         tx.commit().await
     }
 
@@ -724,4 +664,74 @@ pub(crate) async fn insert_comment_tx(
     .await?;
     recompute_rank(tx, c.story_id).await?;
     Ok((comment_id, sid))
+}
+
+/// `edit_story` inside a transaction the caller holds.
+pub(crate) async fn edit_story_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    story: &StoryRow,
+    e: &StoryEdit<'_>,
+    now: i64,
+) -> Result<()> {
+    let StoryEdit {
+        title,
+        link,
+        body,
+        tags,
+        cid,
+    } = *e;
+    sqlx::query("INSERT INTO story_revisions (story_id, title, url, body, tags, at_cid, edited_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .bind(story.id)
+        .bind(&story.title)
+        .bind(&story.url)
+        .bind(&story.body)
+        .bind(&story.tags)
+        .bind(&story.at_cid)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
+    if story.mod_edited {
+        // A moderator's title, URL, and tags stay in force; the author's
+        // own values change underneath them.
+        sqlx::query(
+            "UPDATE stories SET author_title = ?, author_url = ?, author_tags = ?, body = ?, \
+             at_cid = coalesce(?, at_cid), edited_at = ? WHERE id = ?",
+        )
+        .bind(title)
+        .bind(link.map(|l| l.url.as_str()))
+        .bind(tags.join(" "))
+        .bind(body)
+        .bind(cid)
+        .bind(now)
+        .bind(story.id)
+        .execute(&mut **tx)
+        .await?;
+        return Ok(());
+    }
+    sqlx::query(
+        "UPDATE stories SET title = ?, url = ?, canonical_url = ?, domain = ?, body = ?, \
+         at_cid = coalesce(?, at_cid), edited_at = ? WHERE id = ?",
+    )
+    .bind(title)
+    .bind(link.map(|l| l.url.as_str()))
+    .bind(link.map(|l| l.canonical.as_str()))
+    .bind(link.map(|l| l.domain.as_str()))
+    .bind(body)
+    .bind(cid)
+    .bind(now)
+    .bind(story.id)
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query("DELETE FROM taggings WHERE story_id = ?")
+        .bind(story.id)
+        .execute(&mut **tx)
+        .await?;
+    for name in tags {
+        sqlx::query("INSERT INTO taggings (story_id, tag_id) SELECT ?, id FROM tags WHERE name = ? AND active = 1")
+            .bind(story.id)
+            .bind(name)
+            .execute(&mut **tx)
+            .await?;
+    }
+    recompute_rank(tx, story.id).await
 }

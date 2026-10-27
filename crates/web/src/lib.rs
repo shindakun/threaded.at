@@ -3,6 +3,7 @@ pub mod admin;
 pub mod auth;
 pub mod blog;
 pub mod handles;
+pub mod identity;
 pub mod markdown;
 pub mod staff;
 pub mod write;
@@ -37,6 +38,8 @@ pub struct AppState {
     pub handles: handles::HandleChecker,
     /// hydrant's API, when the indexer is on; sign-in tracks the account.
     pub hydrant: Option<threaded_indexer::client::Hydrant>,
+    /// Where the user review page finds when an account was created.
+    pub plc: identity::Plc,
     pub clock: Arc<dyn Fn() -> i64 + Send + Sync>,
     /// The rules in force. Admins change them at runtime.
     pub policy: Arc<std::sync::RwLock<threaded_core::policy::Policy>>,
@@ -57,6 +60,7 @@ impl AppState {
             writer,
             handles,
             hydrant: None,
+            plc: identity::Plc::directory(),
             clock: Arc::new(|| {
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)

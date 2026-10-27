@@ -23,10 +23,20 @@
   <button type="submit" class="secondary">Turn automatic holds back on</button>
 </form>
 {% endif %}
+<h2>Indexer</h2>
+<dl class="facts">
+  <dt>State</dt><dd>{{ indexer.state }}</dd>
+  <dt>Newest event in hydrant</dt><dd>{% if let Some(h) = indexer.head %}{{ h }}{% else %}none{% endif %}</dd>
+  <dt>Next event to read</dt><dd>{% if let Some(n) = indexer.next %}{{ n }}{% else %}none read yet{% endif %}</dd>
+  {% if let Some(b) = indexer.behind %}<dt>Behind</dt><dd>{% if *b == 0 %}Caught up{% else %}Up to {{ b }} events{% endif %}</dd>{% endif %}
+  <dt>Last event applied</dt><dd>{% if let Some(m) = indexer.moved %}{{ m }}{% else %}never{% endif %}</dd>
+  <dt>Waiting records</dt><dd>{{ indexer.pending }}, comments and votes whose story or parent has not arrived</dd>
+</dl>
 <h2>Queue</h2>
 <dl class="facts">
   <dt>Holds</dt><dd><a href="/mod?tab=holds">{{ holds }}</a></dd>
   <dt>Flagged items</dt><dd><a href="/mod?tab=flagged">{{ flagged }}</a></dd>
   <dt>Triage suggestions</dt><dd><a href="/mod?tab=suggestions">{{ suggestions }}</a></dd>
+  <dt>Detached stories</dt><dd><a href="/mod?tab=detached">{{ detached }}</a></dd>
 </dl>
 {% endblock %}

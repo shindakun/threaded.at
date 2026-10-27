@@ -198,6 +198,7 @@ fn hidden_status(
     removed_reason: Option<&str>,
     removed: bool,
     held: bool,
+    detached: bool,
     author_inactive: bool,
 ) -> Option<String> {
     if author_inactive {
@@ -209,6 +210,8 @@ fn hidden_status(
         ))
     } else if held {
         Some("Held for review: spam (automated)".to_string())
+    } else if detached {
+        Some("Hidden for review: the link changed after the edit window".to_string())
     } else {
         None
     }
@@ -381,6 +384,7 @@ pub async fn story_page(
         row.removed_reason.as_deref(),
         row.removed_at.is_some(),
         row.held_at.is_some(),
+        row.detached_at.is_some(),
         row.author_inactive,
     );
     let mut s = StoryView::from_row(row.clone(), now);
@@ -519,6 +523,7 @@ async fn build_thread(
                     c.removed_reason.as_deref(),
                     c.removed_at.is_some(),
                     c.held_at.is_some(),
+                    false,
                     c.author_inactive,
                 )
             },

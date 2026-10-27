@@ -25,6 +25,8 @@ pub struct World {
     /// What a handle check finds, by DID; unset means the lookup fails.
     pub handles:
         Arc<std::sync::Mutex<std::collections::HashMap<String, threaded_store::CheckedHandle>>>,
+    /// When the PLC directory says each DID was created; unset means unknown.
+    pub plc: Arc<std::sync::Mutex<std::collections::HashMap<String, i64>>>,
 }
 
 pub struct Res {
@@ -47,6 +49,16 @@ pub async fn world_with(
     store: Option<(Store, Arc<MemoryRepo>)>,
     triage_key: bool,
 ) -> World {
+    world_custom(now, store, |s| s.triage_key = triage_key).await
+}
+
+/// A world whose app state `change` adjusts first, such as to point it at a
+/// fake hydrant.
+pub async fn world_custom(
+    now: i64,
+    store: Option<(Store, Arc<MemoryRepo>)>,
+    change: impl FnOnce(&mut threaded_web::AppState),
+) -> World {
     let _ = tracing_subscriber::fmt().with_test_writer().try_init();
     let (store, repo) = match store {
         Some(s) => s,
@@ -64,9 +76,11 @@ pub async fn world_with(
         }
     };
     let mut state = super::state(&store, repo.clone(), now, Path::new("/nonexistent/blog"));
-    state.triage_key = triage_key;
+    change(&mut state);
     let handles = Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
     state.handles = threaded_web::handles::HandleChecker::Fixed(handles.clone());
+    let plc = Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+    state.plc = threaded_web::identity::Plc::Fixed(plc.clone());
     let app = router(state);
     let r = app
         .clone()
@@ -84,6 +98,7 @@ pub async fn world_with(
         repo,
         csrf,
         handles,
+        plc,
     }
 }
 

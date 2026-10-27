@@ -12,6 +12,7 @@
   {% if let Some(m) = merged_into %}<p class="mod-status">Merged into <a href="/s/{{ m }}">/s/{{ m }}</a>.</p>{% endif %}
   {% if locked %}<p class="mod-status">Locked.</p>{% endif %}
   {% if mod_edited %}<p class="mod-status">A moderator's edit is in force.</p>{% endif %}
+  {% if detached %}<p class="mod-status">Detached: the author changed the link after the edit window. Hidden until reattached.</p>{% endif %}
   {% if !body_html.is_empty() %}<div class="prose">{{ body_html|safe }}</div>{% endif %}
 </article>
 
@@ -42,6 +43,7 @@
   {% call action("remove", "Remove", "") %}{% endcall %}
 {% endif %}
 {% if kind == "story" %}
+  {% if detached %}{% call action("reattach", "Reattach", "Shows the story again with its new link.") %}{% endcall %}{% endif %}
   {% if locked %}{% call action("unlock", "Unlock", "") %}{% endcall %}{% else %}{% call action("lock", "Lock", "No new comments, votes, or flags.") %}{% endcall %}{% endif %}
   {% if merged_into.is_some() %}
   {% call action("unmerge", "Unmerge", "Moves comments and votes back.") %}{% endcall %}

@@ -54,6 +54,30 @@
 {% endfor %}
 </ol>
 {% endif %}
+{% else if tab == "detached" %}
+{% if detached.is_empty() %}<p class="empty">No detached stories.</p>{% else %}
+<p class="hint">Stories whose author changed the link after the edit window. They are hidden until reattached or removed.</p>
+<ol class="queue">
+{% for d in detached %}
+<li><article class="queue-row" aria-labelledby="d-{{ d.row.short_id }}">
+  <h2 id="d-{{ d.row.short_id }}"><a href="{{ d.row.item_href() }}">{{ d.row.title }}</a></h2>
+  <p class="meta">Link changed {{ d.change }}</p>
+  <p class="meta">by <a href="/mod/u/{{ d.row.author_did }}">{{ d.row.author }}</a>, karma {{ d.row.author_karma }}, here {{ d.row.tenure }} | posted {{ d.row.age }} | detached {{ d.when }}</p>
+  {% for (a, label) in [("reattach", "Reattach"), ("remove", "Remove")] %}
+  <form method="post" action="{{ d.row.review_href() }}" class="inline-form">
+    <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+    <input type="hidden" name="action" value="{{ a }}">
+    <input type="hidden" name="from" value="detached">
+    <label for="d-{{ d.row.short_id }}-{{ a }}">Reason</label>
+    <input id="d-{{ d.row.short_id }}-{{ a }}" name="reason" type="text" required>
+    <button type="submit" class="secondary">{{ label }}</button>
+  </form>
+  {% endfor %}
+  <p><a href="{{ d.row.review_href() }}">Review</a></p>
+</article></li>
+{% endfor %}
+</ol>
+{% endif %}
 {% else if rows.is_empty() %}
 <p class="empty">Nothing waiting.</p>
 {% else %}

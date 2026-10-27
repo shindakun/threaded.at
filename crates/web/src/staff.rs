@@ -9,6 +9,7 @@ use threaded_core::level;
 use threaded_store::{By, LogRow, LogTarget, ModError, QueueItem, StoryOverride, Target, UserRow};
 
 use crate::auth::{check_csrf, Viewer};
+use crate::identity::{self, Found};
 use crate::write::reason_label;
 use crate::{ago, markdown, AppError, AppState, Page, SITE_NAME};
 
@@ -65,7 +66,10 @@ pub(crate) async fn staff(
 
 pub(crate) fn outcome(r: Result<(), ModError>, back: &str) -> Result<Response, AppError> {
     match r {
-        Ok(()) => Ok(Redirect::to(&format!("{back}?done=1")).into_response()),
+        Ok(()) => {
+            let sep = if back.contains('?') { '&' } else { '?' };
+            Ok(Redirect::to(&format!("{back}{sep}done=1")).into_response())
+        }
         Err(ModError::NotFound) => Err(AppError::NotFound),
         Err(e) => Err(AppError::Refused(e.to_string())),
     }
@@ -111,6 +115,13 @@ impl QueueRow {
             _ => format!("/s/{}#c-{}", self.story_short_id, self.short_id),
         }
     }
+}
+
+/// A Unix time as `2023-11-09`, in UTC.
+fn date(t: i64) -> String {
+    time::OffsetDateTime::from_unix_timestamp(t)
+        .map(|d| d.date().to_string())
+        .unwrap_or_else(|_| t.to_string())
 }
 
 fn excerpt(text: &str) -> String {
@@ -223,6 +234,14 @@ struct ModPage {
     rows: Vec<QueueRow>,
     triaged: Vec<(QueueRow, VerdictView)>,
     edits: Vec<EditRow>,
+    detached: Vec<DetachedRow>,
+}
+
+/// A story in the Detached tab.
+pub struct DetachedRow {
+    pub row: QueueRow,
+    pub change: String,
+    pub when: String,
 }
 
 pub async fn mod_queue(
@@ -236,6 +255,7 @@ pub async fn mod_queue(
     let suggestions = st.store.open_suggestions().await?;
     let holds = st.store.holds().await?;
     let triage_suggestions = st.store.triage_suggestions().await?;
+    let detached_items = st.store.detached().await?;
     let tabs = vec![
         Tab {
             key: "holds",
@@ -257,6 +277,11 @@ pub async fn mod_queue(
             label: "Edits",
             count: suggestions.len(),
         },
+        Tab {
+            key: "detached",
+            label: "Detached",
+            count: detached_items.len(),
+        },
     ];
     // With nothing given, open the first tab with work in it.
     let tab = tabs
@@ -268,6 +293,7 @@ pub async fn mod_queue(
     let mut rows = Vec::new();
     let mut edits = Vec::new();
     let mut triaged = Vec::new();
+    let mut detached = Vec::new();
     match tab {
         "holds" | "suggestions" => {
             let list = if tab == "holds" {
@@ -298,6 +324,15 @@ pub async fn mod_queue(
                 })
                 .collect()
         }
+        "detached" => {
+            for d in detached_items {
+                detached.push(DetachedRow {
+                    when: ago(now - d.detached_at),
+                    change: d.change.unwrap_or_default(),
+                    row: queue_row(&st, d.item, now).await?,
+                });
+            }
+        }
         _ => {
             for item in flagged {
                 rows.push(queue_row(&st, item, now).await?);
@@ -315,6 +350,7 @@ pub async fn mod_queue(
             rows,
             triaged,
             edits,
+            detached,
         }
         .render()?,
     ))
@@ -408,6 +444,7 @@ fn log_view(r: LogRow, now: i64) -> LogView {
     let who = match r.actor.as_str() {
         "triage" => "triage".to_string(),
         "console" => "console".to_string(),
+        "indexer" => "indexer".to_string(),
         _ => r.moderator.unwrap_or_else(|| "a moderator".into()),
     };
     let target = match (&r.story_short_id, &r.comment_short_id) {
@@ -467,6 +504,7 @@ struct ItemPage {
     locked: bool,
     merged_into: Option<String>,
     mod_edited: bool,
+    detached: bool,
     tags: Vec<TagPick>,
     flags: Vec<FlagView>,
     revisions: Vec<RevisionView>,
@@ -525,7 +563,7 @@ async fn item_page(
     let verdict = st.store.verdict_for(target).await?.map(VerdictView::from);
     let body_html = markdown::user(&q.body);
     let url = q.url.clone();
-    let (kind, removed, held, locked, merged_into, mod_edited, tags) = match target {
+    let (kind, removed, held, locked, merged_into, mod_edited, detached, tags) = match target {
         Target::Story(_) => {
             let s = st
                 .store
@@ -552,6 +590,7 @@ async fn item_page(
                 s.locked,
                 s.merged_into.clone(),
                 s.mod_edited,
+                s.detached_at.is_some(),
                 tags,
             )
         }
@@ -568,6 +607,7 @@ async fn item_page(
                 c.held_at.is_some(),
                 false,
                 None,
+                false,
                 false,
                 Vec::new(),
             )
@@ -591,6 +631,7 @@ async fn item_page(
             locked,
             merged_into,
             mod_edited,
+            detached,
             tags,
             flags,
             revisions,
@@ -637,6 +678,9 @@ pub struct ActionForm {
     tags: Vec<String>,
     #[serde(default)]
     into: String,
+    /// `detached` when the form is on the Detached tab, to go back there.
+    #[serde(default)]
+    from: String,
 }
 
 pub async fn mod_story_action(
@@ -646,7 +690,11 @@ pub async fn mod_story_action(
     HtmlForm(f): HtmlForm<ActionForm>,
 ) -> Result<Response, AppError> {
     check_csrf(&viewer, &f.csrf)?;
-    let back = format!("/mod/s/{id}");
+    let back = if f.from == "detached" {
+        "/mod?tab=detached".to_string()
+    } else {
+        format!("/mod/s/{id}")
+    };
     let me = staff(&st, &viewer, Need::Moderator, &back).await?;
     let s = st.store.story_any(&id).await?.ok_or(AppError::NotFound)?;
     let now = (st.clock)();
@@ -665,6 +713,7 @@ pub async fn mod_story_action(
         "lock" => st.store.set_locked(s.id, true, by, reason, now).await?,
         "unlock" => st.store.set_locked(s.id, false, by, reason, now).await?,
         "unmerge" => st.store.unmerge(s.id, by, reason, now).await?,
+        "reattach" => st.store.reattach_story(s.id, by, reason, now).await?,
         "clear-edit" => st.store.clear_override(&s, by, reason, now).await?,
         "merge" => {
             let into = f.into.trim().trim_start_matches("/s/");
@@ -778,6 +827,10 @@ struct UserPage {
     done: bool,
     handle: String,
     did: String,
+    handle_verified: bool,
+    handle_history: Vec<(String, String)>,
+    pds: Found<String>,
+    created: Found<String>,
     role: String,
     level: &'static str,
     joined: String,
@@ -859,6 +912,22 @@ pub async fn mod_user(
         .into_iter()
         .map(|r| log_view(r, now))
         .collect();
+    let handle_history = st
+        .store
+        .handle_history(u.id)
+        .await?
+        .into_iter()
+        .map(|(h, t)| (h, ago(now - t)))
+        .collect();
+    // hydrant and the PLC directory are asked at the same time, so the page
+    // waits for the slower of the two at most.
+    let (pds, created) = tokio::join!(identity::pds_host(&st, &u.did), st.plc.created_at(&u.did));
+    let created = match created {
+        Found::Yes(t) => Found::Yes(format!("{} ({})", date(t), ago(now - t))),
+        Found::No => Found::No,
+        Found::NotApplicable => Found::NotApplicable,
+        Found::Failed(e) => Found::Failed(e),
+    };
     Ok(Html(
         UserPage {
             site: SITE_NAME,
@@ -868,6 +937,10 @@ pub async fn mod_user(
             can_ban: u.id != me.user.id && (u.role == "user" || me.is_admin()),
             handle: u.name().to_string(),
             did: u.did.clone(),
+            handle_verified: u.handle_verified,
+            handle_history,
+            pds,
+            created,
             role: u.role.clone(),
             level: lvl.as_str(),
             joined: ago(now - u.created_at),
