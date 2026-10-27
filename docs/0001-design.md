@@ -100,13 +100,13 @@ cross-posting runs a second authorization with the larger scope set.
 
 ### 2.4 Library
 
-`jacquard-oauth` 0.12.2 (MPL-2.0) implements the confidential client
+[jacquard-oauth](https://tangled.org/nonbinary.computer/jacquard) 0.12.2 (MPL-2.0) implements the confidential client
 (`Keyset`, `private_key_jwt`) and DPoP nonce handling, and builds on the stable
 toolchain. Threaded supplies a SQLite-backed `ClientAuthStore` in
 `crates/auth`.
 
 Threaded builds `jacquard-common` and `jacquard-oauth` from patched copies in
-`third_party/` on the RustCrypto 0.14 curves, which keeps `crypto-bigint` past
+`third_party/` on the [RustCrypto](https://github.com/RustCrypto/elliptic-curves) 0.14 curves, which keeps [crypto-bigint](https://github.com/RustCrypto/crypto-bigint) past
 RUSTSEC-2026-0387. `third_party/README.md` lists the changes.
 
 The pushed authorization request sends the client configuration's whole scope
@@ -768,7 +768,7 @@ lexicons/             at.threaded.* schemas.
 ```
 
 - Two processes: `threaded` with one SQLite file in WAL mode, and `hydrant`
-  with its own fjall database. They talk over hydrant's HTTP and WebSocket API
+  with its own [fjall](https://github.com/fjall-rs/fjall) database. They talk over hydrant's HTTP and WebSocket API
   on a Unix socket. hydrant builds from a pinned commit; it is not on
   crates.io, and its forked storage crates come from git.
 - On disk: the SQLite file, hydrant's database, and the blog folder of

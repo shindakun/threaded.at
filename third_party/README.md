@@ -1,8 +1,9 @@
 # third_party
 
-`jacquard-common` and `jacquard-oauth` 0.12.2 from crates.io, patched to use
-the RustCrypto 0.14 curves. Upstream 0.12.2 pins `p256`, `p384`, and `k256`
-0.13, which depend on `crypto-bigint` 0.5.5. RUSTSEC-2026-0387 reports
+`jacquard-common` and `jacquard-oauth` 0.12.2 from crates.io, from
+[jacquard](https://tangled.org/nonbinary.computer/jacquard), patched to use the [RustCrypto](https://github.com/RustCrypto/elliptic-curves) 0.14 curves. Upstream 0.12.2 pins `p256`, `p384`, and `k256`
+0.13, which depend on [crypto-bigint](https://github.com/RustCrypto/crypto-bigint) 0.5.5.
+[RUSTSEC-2026-0387](https://rustsec.org/advisories/RUSTSEC-2026-0387.html) reports
 timing variability in its constant-time operations; the fix is in
 `crypto-bigint` 0.7.6. These copies pull in 0.7.9.
 
