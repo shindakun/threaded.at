@@ -837,6 +837,7 @@ Later migrations add `oauth_sessions` and `oauth_requests` (M1),
 | M4 Indexer | hydrant beside Threaded, stream consumer with cursor, backfill, edits, deletes, account events, records and votes from other apps, the Detached queue tab, hydrant lag on `/admin` | Built |
 | M5 Reader features | Inbox, read ribbons, saved, hidden, filters, feeds, cross-post, labelers, archive links, comment folding, keyboard navigation | Next |
 | M6 Atmosphere | Project submissions, lexicon search, network stats | |
+| M7 Polish | Themes chosen by the reader (light, dark, the system's choice, and Hotdog Stand), each passing `make a11y`; WCAG work beyond AA where it helps readers, such as a high-contrast theme at 7:1 and reduced motion; a full keyboard, screen reader, and zoom pass over every flow (§13.1) | |
 
 Not yet in a milestone:
 
