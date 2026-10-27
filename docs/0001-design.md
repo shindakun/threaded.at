@@ -620,7 +620,8 @@ count:
 A row shows the item, its author with level and tenure, the flags grouped by
 reason with counts, and the triage verdict with its explanation. The row's
 buttons act on the verdict (confirm or release a hold; remove or dismiss a
-suggestion). Optional keys, off by default: `j`/`k` move between rows, `o`
+suggestion). A Detached row shows the old and new link, and its buttons
+reattach the story with the new link or remove it. Optional keys, off by default: `j`/`k` move between rows, `o`
 opens the item review.
 
 **Item review, `/mod/s/{id}` and `/mod/c/{id}`.**
@@ -636,8 +637,10 @@ opens the item review.
 **User review, `/mod/u/{did}`.** A handle in the address finds the account and
 redirects to its DID; actions on the page name the account by DID only.
 
-- Identity: handle, DID, PDS host, handle history, and the account's age from
-  the PLC log.
+- Identity: the verified handle, DID, PDS host from hydrant, every verified
+  handle the account has held, and, for a `did:plc`, when the PLC directory
+  first saw it. hydrant and the directory are asked when the page loads, with
+  a short wait; the page says when either does not answer.
 - Standing: level, tenure, karma, who vouched for them, and whom they vouched
   for, as a tree.
 - Activity: recent stories and comments, removals, flags received by reason,
@@ -652,7 +655,7 @@ in the mod log; settings changes record the old and new value.
 
 | Page | What it holds |
 |---|---|
-| `/admin` | Health: hydrant stream lag (its newest event against Threaded's cursor), triage queue depth and provider errors, queue counts per tab, hold precision and the circuit breaker's state with a reset button |
+| `/admin` | Health: hydrant stream lag (its newest event against Threaded's cursor) and records waiting for their story, triage queue depth and provider errors, queue counts per tab, hold precision and the circuit breaker's state with a reset button |
 | `/admin/tags` | Every tag with its category, description, rank boost, and flags (`privileged`, `new_users_ok`, `is_media`, `active`); create and edit forms |
 | `/admin/people` | Moderators and admins, with grant and revoke; role badges in use |
 | `/admin/settings` | Level thresholds, rate limits, flag windows and limits, labelers, hold-precision floor, triage model ID |
@@ -826,7 +829,7 @@ Later migrations add `oauth_sessions`, `oauth_states`, `suggestions`,
 | M1 Sign-in | OAuth confidential client, metadata and JWKS endpoints, SQLite auth store, sessions, handle verification, sign-in form with handle lookahead, localhost dev flow | Built |
 | M2 Writing | Submit, comment, reply, upvote, flag, edit, delete; records to the PDS; public upvotes; profiles; Markdown; rate limits; levels enforced | Built |
 | M3 Moderation | Mod log, moderator queue and item and user review, admin pages, actions, notes, bans, merges, role badges, suggestions, AI triage | Built |
-| M4 Indexer | hydrant beside Threaded, stream consumer with cursor, backfill, edits, deletes, account events, records and votes from other apps, the Detached queue tab, hydrant lag on `/admin` | |
+| M4 Indexer | hydrant beside Threaded, stream consumer with cursor, backfill, edits, deletes, account events, records and votes from other apps, the Detached queue tab, hydrant lag on `/admin` | Built |
 | M5 Reader features | Inbox, read ribbons, saved, hidden, filters, feeds, cross-post, labelers | |
 | M6 Atmosphere | Project submissions, lexicon search, network stats | |
 

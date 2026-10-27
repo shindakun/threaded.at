@@ -1,0 +1,41 @@
+[Unit]
+Description=hydrant, the atproto indexer Threaded reads
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=hydrant
+Group=hydrant
+EnvironmentFile=/etc/hydrant/hydrant.env
+WorkingDirectory=/var/lib/hydrant
+ExecStart=/opt/hydrant/bin/hydrant
+Restart=on-failure
+RestartSec=5
+
+# /run/hydrant holds the API socket. Its group is hydrant, which threaded
+# joins (threaded.service.d/hydrant.conf), so only those two reach the API.
+RuntimeDirectory=hydrant
+RuntimeDirectoryMode=0750
+StateDirectory=hydrant
+StateDirectoryMode=0700
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

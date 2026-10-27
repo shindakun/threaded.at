@@ -16,6 +16,10 @@ behind nginx, with SQLite on local disk. Every installed file is in
 | Service | `threaded.service` | runs as `threaded` |
 | Web server | nginx on 80 and 443, proxying to `127.0.0.1:8787` | root |
 | Certificates | `/etc/letsencrypt/live/threaded.at/` | certbot |
+| hydrant source and binary | `/opt/hydrant/src`, `/opt/hydrant/bin/hydrant` | deploy user, root |
+| hydrant settings | `/etc/hydrant/hydrant.env` | root, mode 0640, group `hydrant` |
+| hydrant database | `/var/lib/hydrant/db` | `hydrant` |
+| hydrant's API socket | `/run/hydrant/api.sock`, mode 0660 | `hydrant`; `threaded` joins its group |
 
 The service's working directory is the checkout, so its default blog folder,
 `./blog`, is the repository's `blog/`. Publishing a post is a commit and a
@@ -229,7 +233,72 @@ sudo -u threaded sh -c 'set -a; . /etc/threaded/threaded.env; /opt/threaded/bin/
 error names what failed. `/admin` shows whether triage is on, its queue, and
 its error rate. Back up the key file with the others.
 
-## 12. Updating
+## 12. The network indexer
+
+[hydrant](https://tangled.org/did:plc:dfl62fgb7wtjj3fcbb72naae/hydrant) reads
+Threaded's records from every account on the network and streams them to
+Threaded over a Unix socket. Without it, Threaded indexes only what is posted
+through its own forms. Why each setting is what it is, and which advisories
+the build fixes, is in `docs/0006-m4.md`.
+
+**Build.** `deploy/build-hydrant.sh` checks out the pinned commit, moves the
+lockfile's vulnerable and yanked packages to fixed patch releases and nothing
+else, and builds with `--locked`. The build needs `cmake` and about 5 GB of
+swap in all: the final crate compiles as one unit and is killed with less.
+Build output takes about 1.7 GB until `cargo clean`.
+
+```sh
+sudo apt install -y cmake
+swapon --show    # under 5 GB in total? add a second swap file:
+sudo fallocate -l 4G /swapfile2 && sudo chmod 600 /swapfile2
+sudo mkswap /swapfile2 && sudo swapon /swapfile2
+echo '/swapfile2 none swap sw 0 0' | sudo tee -a /etc/fstab
+
+sudo install -d -m 0755 /opt/hydrant /opt/hydrant/bin
+sudo install -d -o "$USER" -g "$USER" -m 0755 /opt/hydrant/src
+/opt/threaded/src/deploy/build-hydrant.sh
+sudo install -m 0755 /opt/hydrant/src/target/release/hydrant /opt/hydrant/bin/hydrant
+```
+
+**Service.** hydrant runs as its own account. Its database must be new, since
+compression is fixed when it is created; do not reuse one from a trial run.
+
+```sh
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin hydrant
+sudo install -d -m 0755 /etc/hydrant
+sudo install -o root -g hydrant -m 0640 /opt/threaded/src/deploy/hydrant.env /etc/hydrant/hydrant.env
+sudo install -m 0644 /opt/threaded/src/deploy/hydrant.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now hydrant
+sudo curl -s --unix-socket /run/hydrant/api.sock http://localhost/stream/head
+```
+
+The last line prints `{"id":null}` until hydrant has indexed an event, then
+the newest event's ID. Logs: `journalctl -u hydrant -f`. hydrant's database is not
+in the backups: it refills from the network.
+
+**Connect Threaded.** A drop-in adds `threaded` to the `hydrant` group so it
+can open the socket, and `THREADED_HYDRANT_SOCKET` turns the indexer on:
+
+```sh
+sudo install -d -m 0755 /etc/systemd/system/threaded.service.d
+sudo install -m 0644 /opt/threaded/src/deploy/threaded.service.d/hydrant.conf /etc/systemd/system/threaded.service.d/
+echo 'THREADED_HYDRANT_SOCKET=/run/hydrant/api.sock' | sudo tee -a /etc/threaded/threaded.env
+sudo systemctl daemon-reload
+sudo systemctl restart threaded
+journalctl -u threaded | grep "hydrant's stream"
+```
+
+The log line shows Threaded reading the stream. At startup Threaded also asks
+hydrant to track every account that has signed in, so their votes arrive.
+`/admin` shows the stream's lag and any records waiting for their story.
+
+**Updating hydrant.** Run `build-hydrant.sh` again, install the binary, and
+`sudo systemctl restart hydrant`. The script always builds the commit it
+names; moving to a newer hydrant means a new commit there and a new audit of
+its lockfile.
+
+## 13. Updating
 
 ```sh
 /opt/threaded/src/deploy/update.sh
@@ -239,9 +308,8 @@ It pulls, builds, takes a backup, installs the new binary, restarts the
 service, and checks `/healthz`. Migrations are forward-only, so the backup it
 takes is the way back from a bad release.
 
-## 13. Later milestones
+## 14. Later milestones
 
 | Milestone | Adds to the droplet |
 |---|---|
-| M4 Indexer | hydrant as a second systemd service on a Unix socket in `/run/hydrant/`, with its database in `/var/lib/hydrant` |
 | Lexicons | A `_lexicon.threaded.at` TXT record naming the publishing DID |

@@ -30,11 +30,13 @@ Working today:
   merges, bans, role badges, notes, edit suggestions, a public moderation log,
   and admin pages for tags, roles, settings, and the site rules.
 - **AI triage**, off unless an Anthropic API key is configured.
+- **The network indexer:** Threaded records written from anywhere, not only
+  through threaded.at, arrive through
+  [hydrant](https://tangled.org/did:plc:dfl62fgb7wtjj3fcbb72naae/hydrant):
+  new posts, edits, deletes, public votes, handle changes, and deactivated
+  accounts. Off unless `THREADED_HYDRANT_SOCKET` is set.
 
-In progress: **M4, the indexer**, which reads Threaded records from the whole
-network through [hydrant](https://tangled.org/did:plc:dfl62fgb7wtjj3fcbb72naae/hydrant),
-not only those written through threaded.at. Its plan is
-[docs/0006-m4.md](docs/0006-m4.md). The milestone table is in the design doc,
+Next: **M5, reader features**. The milestone table is in the design doc,
 section 16.
 
 ## Quick start
@@ -146,7 +148,7 @@ section 12. A file that fails to parse is skipped and the reason is logged.
 | `/u/{handle}` | A user's stories, comments, and public upvotes; a DID works too |
 | `/settings` | Public upvotes; keeping your posts out of AI triage (form target `/settings/triage`) |
 | `/s/{short_id}/suggest` | Suggest a story's title and tags |
-| `/mod` | Moderation queue: Holds, Flagged, Suggestions, Edits; form targets `/mod/verdicts/{id}` and `/mod/suggestions/{id}` |
+| `/mod` | Moderation queue: Holds, Flagged, Suggestions, Edits, Detached; form targets `/mod/verdicts/{id}` and `/mod/suggestions/{id}` |
 | `/mod/s/{short_id}`, `/mod/c/{short_id}`, `/mod/u/{did}` | Review a story, comment, or user, and act on it; a handle in `/mod/u/` redirects to the DID |
 | `/moderations` | The public moderation log |
 | `/moderations/stats` | How often moderators agreed with AI triage |
@@ -173,7 +175,7 @@ migrations/        forward-only SQL migrations
 lexicons/          at.threaded.* lexicon schemas
 scripts/a11y/      axe-core page audit
 blog/              blog posts, served from ./blog
-deploy/            systemd units, nginx config, backup and update scripts
+deploy/            systemd units, nginx config, backup, update, and hydrant build scripts
 docs/              design doc, deploy doc, milestone plans, and deck
 third_party/       jacquard crates patched onto fixed crypto; see its README
 ```
