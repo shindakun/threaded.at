@@ -418,8 +418,9 @@ async fn build_thread(
 ) -> Result<Vec<ThreadEvent>, AppError> {
     let now = (st.clock)();
     let me = a.map(|a| a.user.id);
-    let badges =
-        crate::badge_map(st, &comments.iter().map(|c| c.user_id).collect::<Vec<_>>()).await?;
+    let commenters: Vec<i64> = comments.iter().map(|c| c.user_id).collect();
+    crate::handles::refresh(st, &commenters).await;
+    let badges = crate::badge_map(st, &commenters).await?;
     let mut children: HashMap<Option<i64>, Vec<&CommentRow>> = HashMap::new();
     for c in comments {
         children.entry(c.parent_id).or_default().push(c);

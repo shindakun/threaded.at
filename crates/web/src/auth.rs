@@ -191,6 +191,7 @@ impl FromRequestParts<AppState> for Viewer {
                 .unwrap_or(false);
             if live {
                 if let Ok(Some(user)) = st.store.user_by_did(&session.did).await {
+                    crate::handles::refresh(st, &[user.id]).await;
                     viewer.name = Some(user.name().to_string());
                     viewer.me = Some(Me {
                         user_id: user.id,

@@ -22,6 +22,9 @@ pub struct World {
     pub store: Store,
     pub repo: Arc<MemoryRepo>,
     pub csrf: String,
+    /// What a handle check finds, by DID; unset means the lookup fails.
+    pub handles:
+        Arc<std::sync::Mutex<std::collections::HashMap<String, threaded_store::CheckedHandle>>>,
 }
 
 pub struct Res {
@@ -62,6 +65,8 @@ pub async fn world_with(
     };
     let mut state = super::state(&store, repo.clone(), now, Path::new("/nonexistent/blog"));
     state.triage_key = triage_key;
+    let handles = Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+    state.handles = threaded_web::handles::HandleChecker::Fixed(handles.clone());
     let app = router(state);
     let r = app
         .clone()
@@ -78,6 +83,7 @@ pub async fn world_with(
         store,
         repo,
         csrf,
+        handles,
     }
 }
 

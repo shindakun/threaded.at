@@ -88,6 +88,15 @@ cross-posting runs a second authorization with the larger scope set.
   session key. Tokens and DPoP keys stay in the database.
 - Handles are shown only when they resolve back to the same DID. Otherwise the
   UI shows the DID.
+- A verified handle belongs to one DID at a time: when a DID verifies a handle,
+  any other account holding it loses the verification.
+- Handles are checked at sign-in and again in the background, without making
+  a request wait: when a page shows an account (as the signed-in user or as
+  an author) whose check is over a day old, or over an hour old while it has
+  no verified handle. A failed lookup keeps the stored handle and is tried
+  again in an hour. From M4, hydrant's identity events update a handle within
+  seconds. Bluesky's AppView works the same way: identity events, plus a daily
+  re-check, hourly without a valid handle.
 
 ### 2.4 Library
 
@@ -388,7 +397,7 @@ never submit or comment.
 | `/top?t=day\|week\|month\|year\|all` | Score descending within the window |
 | `/t/{tag}` | Rank, filtered to the tag |
 | `/domain/{domain}` | Newest, domain and its subdomains |
-| `/u/{handle}` | A user's stories and comments, newest first |
+| `/u/{handle}` | A user's stories and comments, newest first; a DID works too |
 
 ### 6.1 Rank
 
@@ -624,7 +633,8 @@ opens the item review.
 - Every action from §9.3 that applies to the item, each with a reason field.
 - The item's entries in the mod log.
 
-**User review, `/mod/u/{handle}`.**
+**User review, `/mod/u/{did}`.** A handle in the address finds the account and
+redirects to its DID; actions on the page name the account by DID only.
 
 - Identity: handle, DID, PDS host, handle history, and the account's age from
   the PLC log.

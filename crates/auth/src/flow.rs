@@ -130,15 +130,54 @@ pub async fn finish(
     })
 }
 
+/// What checking a DID's handle found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HandleCheck {
+    /// The DID document's first handle, and it resolves back to the DID.
+    Verified(String),
+    /// The document names no usable handle, or it resolves to another DID.
+    Unverified,
+    /// A lookup failed, so nothing is known; keep what was there.
+    Failed,
+}
+
+/// `check_handle` for a DID given as text; one that does not parse names no handle.
+pub async fn check_handle_of(clients: &Clients, did: &str) -> HandleCheck {
+    match Did::new(SmolStr::new(did)) {
+        Ok(d) => check_handle(clients, &d).await,
+        Err(_) => HandleCheck::Unverified,
+    }
+}
+
+/// Checks a DID's handle both ways: the DID document names it, and it
+/// resolves back to the DID.
+pub async fn check_handle(clients: &Clients, did: &Did) -> HandleCheck {
+    let resolver = clients.base.oauth.client.as_ref();
+    let Ok(resp) = resolver.resolve_did_doc(did).await else {
+        return HandleCheck::Failed;
+    };
+    let Ok(doc) = resp.parse() else {
+        return HandleCheck::Failed;
+    };
+    let Some(handle) = doc.handles().into_iter().next().map(|h| h.to_string()) else {
+        return HandleCheck::Unverified;
+    };
+    let Ok(parsed) = Handle::new(SmolStr::new(&handle)) else {
+        return HandleCheck::Unverified;
+    };
+    match resolver.resolve_handle(&parsed).await {
+        Ok(back) if back.as_str() == did.as_str() => HandleCheck::Verified(handle),
+        Ok(_) => HandleCheck::Unverified,
+        Err(_) => HandleCheck::Failed,
+    }
+}
+
 /// The DID document's first handle, if that handle resolves back to `did`.
 pub async fn verify_handle(clients: &Clients, did: &Did) -> Option<String> {
-    let resolver = clients.base.oauth.client.as_ref();
-    let resp = resolver.resolve_did_doc(did).await.ok()?;
-    let doc = resp.parse().ok()?;
-    let handle = doc.handles().into_iter().next()?.to_string();
-    let parsed = Handle::new(SmolStr::new(&handle)).ok()?;
-    let back = resolver.resolve_handle(&parsed).await.ok()?;
-    (back.as_str() == did.as_str()).then_some(handle)
+    match check_handle(clients, did).await {
+        HandleCheck::Verified(h) => Some(h),
+        _ => None,
+    }
 }
 
 /// Revokes the session at its server and deletes it here. A session that no

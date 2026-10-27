@@ -7,10 +7,12 @@ use threaded_core::rank::{self, RankInput};
 use threaded_core::search::{Query, Sort};
 
 mod accept;
+mod handles;
 mod m2;
 mod moderation;
 mod triage;
 pub use accept::*;
+pub use handles::*;
 pub use m2::*;
 pub use moderation::*;
 pub use triage::*;
@@ -155,9 +157,10 @@ impl Store {
     ) -> Result<i64> {
         let mut tx = self.pool.begin().await?;
         let id = sqlx::query_scalar(
-            "INSERT INTO users (did, handle, handle_verified, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?4) \
+            "INSERT INTO users (did, handle, handle_verified, created_at, last_seen_at, handle_checked_at) \
+             VALUES (?1, ?2, ?3, ?4, ?4, ?4) \
              ON CONFLICT(did) DO UPDATE SET handle = excluded.handle, handle_verified = excluded.handle_verified, \
-             last_seen_at = excluded.last_seen_at RETURNING id",
+             last_seen_at = excluded.last_seen_at, handle_checked_at = excluded.handle_checked_at RETURNING id",
         )
         .bind(did)
         .bind(handle)

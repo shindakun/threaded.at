@@ -2,6 +2,7 @@ use std::collections::HashMap;
 pub mod admin;
 pub mod auth;
 pub mod blog;
+pub mod handles;
 pub mod markdown;
 pub mod staff;
 pub mod write;
@@ -32,6 +33,8 @@ pub struct AppState {
     pub blog: Arc<Blog>,
     pub auth: Arc<Auth>,
     pub writer: threaded_auth::records::Writer,
+    /// Where background handle checks go.
+    pub handles: handles::HandleChecker,
     pub clock: Arc<dyn Fn() -> i64 + Send + Sync>,
     /// The rules in force. Admins change them at runtime.
     pub policy: Arc<std::sync::RwLock<threaded_core::policy::Policy>>,
@@ -44,11 +47,13 @@ pub struct AppState {
 impl AppState {
     pub fn new(store: Store, blog: Blog, auth: Auth) -> AppState {
         let writer = threaded_auth::records::Writer::Pds(auth.clients.clone());
+        let handles = handles::HandleChecker::Network(auth.clients.clone());
         AppState {
             store,
             blog: Arc::new(blog),
             auth: Arc::new(auth),
             writer,
+            handles,
             clock: Arc::new(|| {
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -724,7 +729,9 @@ pub(crate) async fn prepare_rows(
     viewer: &Viewer,
     stories: &mut [StoryView],
 ) -> Result<(), AppError> {
-    let badges = badge_map(st, &stories.iter().map(|s| s.user_id).collect::<Vec<_>>()).await?;
+    let authors: Vec<i64> = stories.iter().map(|s| s.user_id).collect();
+    handles::refresh(st, &authors).await;
+    let badges = badge_map(st, &authors).await?;
     for s in stories.iter_mut() {
         s.badges = badges.get(&s.user_id).cloned().unwrap_or_default();
     }

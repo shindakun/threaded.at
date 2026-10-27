@@ -26,6 +26,9 @@ pub fn state(
         store: store.clone(),
         blog: Arc::new(Blog::new(blog_dir, std::time::Duration::ZERO)),
         writer: Writer::Memory(repo),
+        // Tests never look handles up on the network; with no answer set, a
+        // check fails and keeps the stored handle.
+        handles: threaded_web::handles::HandleChecker::Fixed(Default::default()),
         clock: Arc::new(move || now),
         policy: Default::default(),
         triage_key: false,
