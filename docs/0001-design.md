@@ -860,6 +860,10 @@ Not yet in a milestone:
 - Whether to add network stats (events per collection namespace over time).
   hydrant in filter mode sees only Threaded's records, so this needs a
   full-network source.
+- Whether to give link previews an image (`og:image`) per story. Pages carry
+  `og:title` and `og:description` now, and previews show text only. An image
+  would be drawn when first requested and cached, not when the story is
+  submitted, since titles change through edits and moderator overrides.
 - Whether AI triage should be opt-in rather than opt-out (§9.2, consent)
   before it is turned on for threaded.at.
 - Whether to move triage (§9.2) onto aimod, the standalone triage service

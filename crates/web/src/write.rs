@@ -191,6 +191,34 @@ struct StoryPage {
     comment_note: Option<String>,
     flag: FlagView,
     thread: Vec<ThreadEvent>,
+    /// What a link preview shows under the title.
+    og_description: String,
+}
+
+/// The description a link preview shows: the start of a text post, or for a
+/// link, where it goes and who posted it.
+fn og_description(s: &StoryView, body: &str) -> String {
+    let text = markdown::plain(body);
+    if !text.is_empty() {
+        let mut short: String = text.chars().take(200).collect();
+        if short.len() < text.len() {
+            short.push('\u{2026}');
+        }
+        return short;
+    }
+    let comments = match s.comments {
+        0 => "no comments".to_string(),
+        1 => "1 comment".to_string(),
+        n => format!("{n} comments"),
+    };
+    if s.domain.is_empty() {
+        format!("Posted by {}, with {comments}.", s.handle)
+    } else {
+        format!(
+            "A link to {}, posted by {}, with {comments}.",
+            s.domain, s.handle
+        )
+    }
 }
 
 /// Why an item is hidden, worded for its author.
@@ -412,6 +440,7 @@ pub async fn story_page(
             comment_note,
             flag,
             thread,
+            og_description: og_description(&s, &row.body),
             s,
         }
         .render()?,

@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% import "macros.html" as m %}
 {% block title %}{{ s.title }} | {{ site }}{% endblock %}
+{% block og %}
+<meta name="description" content="{{ og_description }}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="{{ s.title }}">
+<meta property="og:description" content="{{ og_description }}">
+{% endblock %}
 {% block main %}
 <h1 class="vh">{{ s.title }}</h1>
 <ol class="stories">{% include "story_row.html" %}</ol>

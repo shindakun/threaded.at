@@ -33,9 +33,35 @@ pub fn user(md: &str) -> String {
         .to_string()
 }
 
+/// The words of user Markdown with the markup removed, for a link preview's
+/// description. Code and raw HTML count as text; images give their alt text.
+pub fn plain(md: &str) -> String {
+    let mut out = String::new();
+    for e in Parser::new_ext(md, Options::ENABLE_STRIKETHROUGH) {
+        match e {
+            Event::Text(t) | Event::Code(t) | Event::Html(t) | Event::InlineHtml(t) => {
+                out.push_str(&t)
+            }
+            Event::SoftBreak | Event::HardBreak | Event::End(_) => out.push(' '),
+            _ => {}
+        }
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plain_text_drops_the_markup() {
+        assert_eq!(
+            plain("# Hi\n\nSee **this** [link](https://e.example) and `code`.\n\n- one\n- two"),
+            "Hi See this link and code. one two"
+        );
+        assert_eq!(plain("<b>raw</b>"), "<b>raw</b>");
+        assert_eq!(plain("   "), "");
+    }
 
     #[test]
     fn user_text_has_no_images_headings_or_html() {

@@ -63,6 +63,9 @@ async fn posts_load_change_and_disappear_without_restart() {
     let (status, body) = get(&app, "/blog/first-update").await;
     assert_eq!(status, StatusCode::OK);
     assert!(body.contains("<title>First update | Threaded</title>"));
+    assert!(body.contains(r#"<meta property="og:title" content="First update">"#));
+    assert!(body.contains(r#"<meta property="og:description" content="What changed">"#));
+    assert!(body.contains(r#"<meta property="og:type" content="article">"#));
     assert_eq!(body.matches("<h1").count(), 1);
     assert!(body.contains("<h2>Changes</h2>"));
     assert!(body.contains("We shipped it."));

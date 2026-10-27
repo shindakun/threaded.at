@@ -152,3 +152,43 @@ async fn pages_have_one_h1_a_distinct_title_and_a_skip_link() {
     assert!(body.contains(r#"<a href="/newest" aria-current="page">"#));
     assert_eq!(body.matches("aria-current").count(), 1);
 }
+
+/// The `content` of each `<meta property="og:NAME">` on a page.
+fn og<'a>(body: &'a str, name: &str) -> Vec<&'a str> {
+    let key = format!(r#"<meta property="og:{name}" content=""#);
+    body.match_indices(&key)
+        .map(|(i, _)| {
+            let rest = &body[i + key.len()..];
+            &rest[..rest.find('"').unwrap()]
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn pages_carry_link_preview_tags() {
+    let (app, id) = app().await;
+    let site = "A link aggregator on the AT Protocol: tagged stories and threaded comments, with moderation in the open.";
+
+    // The home page and other listings get the site's own preview.
+    for uri in ["/", "/newest", "/tags"] {
+        let (_, body) = get(&app, uri).await;
+        assert_eq!(og(&body, "title"), ["Threaded"], "{uri}");
+        assert_eq!(og(&body, "description"), [site], "{uri}");
+        assert_eq!(og(&body, "type"), ["website"], "{uri}");
+        assert_eq!(og(&body, "site_name"), ["Threaded"], "{uri}");
+        assert!(body.contains(r#"<meta name="twitter:card" content="summary">"#));
+    }
+
+    // A story previews as itself, escaped.
+    let (_, body) = get(&app, &format!("/s/{id}")).await;
+    assert_eq!(
+        og(&body, "title"),
+        ["Borrowing &#60;b&#62;without&#60;/b&#62; tears"]
+    );
+    assert_eq!(
+        og(&body, "description"),
+        ["A link to blog.example.com, posted by alice.example, with no comments."]
+    );
+    assert_eq!(og(&body, "type"), ["article"]);
+    assert_eq!(og(&body, "site_name"), ["Threaded"]);
+}

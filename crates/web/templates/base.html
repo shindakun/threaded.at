@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}{{ site }}{% endblock %}</title>
+{% block og %}
+<meta name="description" content="A link aggregator on the AT Protocol: tagged stories and threaded comments, with moderation in the open.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ site }}">
+<meta property="og:description" content="A link aggregator on the AT Protocol: tagged stories and threaded comments, with moderation in the open.">
+{% endblock %}
+<meta property="og:site_name" content="{{ site }}">
+<meta name="twitter:card" content="summary">
 <link rel="stylesheet" href="/static/site.css">
 </head>
 <body>

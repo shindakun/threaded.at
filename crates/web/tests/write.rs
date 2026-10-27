@@ -1046,3 +1046,43 @@ async fn story_edit_errors_keep_what_was_typed() {
     let page = later.get(&edit, &alice_later).await.body;
     assert!(page.contains("The link is fixed one hour after posting."));
 }
+
+#[tokio::test]
+async fn a_text_story_previews_its_opening_words() {
+    let w = world().await;
+    let alice = w.user("alice.example", &base(), 100, 0).await;
+    let r = w
+        .post(
+            "/submit",
+            &alice,
+            &[
+                ("title", "Ask: \"quotes\" & things"),
+                (
+                    "text",
+                    &format!(
+                        "**Why** does [this](https://e.example) happen?\n\n{}",
+                        "word ".repeat(60)
+                    ),
+                ),
+                ("tags", "ask"),
+            ],
+        )
+        .await;
+    let id = r.location.unwrap().trim_start_matches("/s/").to_string();
+    let page = w.get(&format!("/s/{id}"), "").await.body;
+    assert!(
+        page.contains(r#"<meta property="og:title" content="Ask: &#34;quotes&#34; &#38; things">"#),
+        "{page}"
+    );
+    let start = r#"<meta property="og:description" content="Why does this happen? word word"#;
+    assert!(page.contains(start), "{page}");
+    let desc = page
+        .split(r#"<meta property="og:description" content=""#)
+        .nth(1)
+        .unwrap();
+    let desc = &desc[..desc.find('"').unwrap()];
+    assert!(
+        desc.ends_with('\u{2026}') && desc.chars().count() == 201,
+        "{desc}"
+    );
+}

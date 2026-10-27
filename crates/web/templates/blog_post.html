@@ -1,5 +1,11 @@
 {% extends "base.html" %}
 {% block title %}{{ post.title }} | {{ site }}{% endblock %}
+{% block og %}
+{% if let Some(d) = post.summary %}<meta name="description" content="{{ d }}">{% endif %}
+<meta property="og:type" content="article">
+<meta property="og:title" content="{{ post.title }}">
+{% if let Some(d) = post.summary %}<meta property="og:description" content="{{ d }}">{% endif %}
+{% endblock %}
 {% block main %}
 <article class="post">
   <h1>{{ post.title }}</h1>
