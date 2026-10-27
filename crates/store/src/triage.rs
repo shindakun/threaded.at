@@ -246,10 +246,10 @@ impl Store {
             }
             Target::Comment(_) => String::new(),
         };
-        let author: crate::UserRow = sqlx::query_as(
-            "SELECT id, did, handle, handle_verified, role, karma, public_votes, vouched_by, created_at, \
-             banned_at, banned_reason FROM users WHERE id = ?",
-        )
+        let author: crate::UserRow = sqlx::query_as(&format!(
+            "SELECT {} FROM users WHERE id = ?",
+            crate::m2::USER_COLUMNS
+        ))
         .bind(user_id)
         .fetch_one(self.pool())
         .await?;

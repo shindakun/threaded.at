@@ -1242,10 +1242,10 @@ impl Store {
 
     /// Moderators and admins, by role then handle.
     pub async fn staff_members(&self) -> Result<Vec<crate::UserRow>> {
-        sqlx::query_as(
-            "SELECT id, did, handle, handle_verified, role, karma, public_votes, vouched_by, created_at, \
-             banned_at, banned_reason FROM users WHERE role <> 'user' ORDER BY role, handle",
-        )
+        sqlx::query_as(&format!(
+            "SELECT {} FROM users WHERE role <> 'user' ORDER BY role, handle",
+            crate::m2::USER_COLUMNS
+        ))
         .fetch_all(self.pool())
         .await
     }

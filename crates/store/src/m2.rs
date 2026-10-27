@@ -17,9 +17,23 @@ pub struct UserRow {
     pub created_at: i64,
     pub banned_at: Option<i64>,
     pub banned_reason: Option<String>,
+    /// Set by signing in; an account known only from the network has none.
+    pub last_seen_at: Option<i64>,
+    /// The network reports the account inactive: deactivated or taken down.
+    pub inactive_at: Option<i64>,
 }
 
+/// Every column of `UserRow`, in order.
+pub(crate) const USER_COLUMNS: &str =
+    "id, did, handle, handle_verified, role, karma, public_votes, \
+     vouched_by, created_at, banned_at, banned_reason, last_seen_at, inactive_at";
+
 impl UserRow {
+    /// Whether this account has ever signed in here.
+    pub fn signed_in(&self) -> bool {
+        self.last_seen_at.is_some()
+    }
+
     pub fn account(&self, now: i64) -> Account {
         Account {
             tenure_days: (now - self.created_at).max(0) / 86_400,
@@ -85,7 +99,8 @@ impl CommentRow {
     }
 }
 
-const COMMENT_COLUMNS: &str = "c.id, c.short_id, c.story_id, s.short_id AS story_short_id, \
+pub(crate) const COMMENT_COLUMNS: &str =
+    "c.id, c.short_id, c.story_id, s.short_id AS story_short_id, \
      s.title AS story_title, c.parent_id, c.depth, c.body, c.score, c.flags, c.created_at, \
      c.edited_at, c.deleted_at, c.user_id, u.did AS author_did, \
      CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS handle, c.at_uri, c.at_cid, \
@@ -212,18 +227,20 @@ pub(crate) async fn recompute_karma(tx: &mut Transaction<'_, Sqlite>, user_id: i
 
 impl Store {
     pub async fn user_by_did(&self, did: &str) -> Result<Option<UserRow>> {
-        sqlx::query_as("SELECT id, did, handle, handle_verified, role, karma, public_votes, vouched_by, created_at, banned_at, banned_reason FROM users WHERE did = ?")
+        sqlx::query_as(&format!("SELECT {USER_COLUMNS} FROM users WHERE did = ?"))
             .bind(did)
             .fetch_optional(&self.pool)
             .await
     }
 
     pub async fn user_by_handle(&self, handle: &str) -> Result<Option<UserRow>> {
-        sqlx::query_as("SELECT id, did, handle, handle_verified, role, karma, public_votes, vouched_by, created_at, banned_at, banned_reason FROM users WHERE did = ?1 OR (handle = ?1 AND handle_verified) \
-             ORDER BY did = ?1 DESC LIMIT 1")
-            .bind(handle)
-            .fetch_optional(&self.pool)
-            .await
+        sqlx::query_as(&format!(
+            "SELECT {USER_COLUMNS} FROM users WHERE did = ?1 OR (handle = ?1 AND handle_verified) \
+             ORDER BY did = ?1 DESC LIMIT 1"
+        ))
+        .bind(handle)
+        .fetch_optional(&self.pool)
+        .await
     }
 
     pub async fn all_tags(&self) -> Result<Vec<TagRow>> {

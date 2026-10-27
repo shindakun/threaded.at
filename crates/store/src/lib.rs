@@ -10,11 +10,13 @@ mod accept;
 mod handles;
 mod m2;
 mod moderation;
+mod network;
 mod triage;
 pub use accept::*;
 pub use handles::*;
 pub use m2::*;
 pub use moderation::*;
+pub use network::*;
 pub use triage::*;
 
 pub use sqlx::Error;
@@ -74,6 +76,8 @@ pub struct StoryRow {
     pub locked_reason: Option<String>,
     /// A moderator's edit is in force.
     pub mod_edited: bool,
+    /// The link changed after the edit window; hidden for moderators.
+    pub detached_at: Option<i64>,
 }
 
 impl StoryRow {
@@ -81,9 +85,12 @@ impl StoryRow {
         self.tags.split_whitespace().collect()
     }
 
-    /// Removed, held, or merged: hidden from listings and from readers.
+    /// Removed, held, merged, or detached: hidden from listings and readers.
     pub fn hidden(&self) -> bool {
-        self.removed_at.is_some() || self.held_at.is_some() || self.merged_into.is_some()
+        self.removed_at.is_some()
+            || self.held_at.is_some()
+            || self.merged_into.is_some()
+            || self.detached_at.is_some()
     }
 }
 
@@ -100,19 +107,19 @@ pub struct NewStory<'a> {
     pub record: Option<(&'a str, &'a str)>,
 }
 
-const STORY_COLUMNS: &str =
+pub(crate) const STORY_COLUMNS: &str =
     "s.id, s.short_id, s.title, s.url, s.domain, s.score, s.comment_count, \
      s.created_at, CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS handle, s.body, s.user_id, u.did AS author_did, s.user_is_author, s.flags, \
      s.edited_at, s.locked, s.at_uri, s.at_cid, s.removed_at, s.removed_reason, s.held_at, \
      (SELECT m.short_id FROM stories m WHERE m.id = s.merged_into) AS merged_into, \
-     s.locked_reason, s.override_by IS NOT NULL AS mod_edited, \
+     s.locked_reason, s.override_by IS NOT NULL AS mod_edited, s.detached_at, \
      coalesce((SELECT group_concat(name, ' ') FROM \
          (SELECT t.name FROM taggings tg JOIN tags t ON t.id = tg.tag_id \
           WHERE tg.story_id = s.id ORDER BY t.name)), '') AS tags";
 
-/// Stories everyone may see: not deleted, merged, removed, or held.
+/// Stories everyone may see: not deleted, merged, removed, held, or detached.
 const VISIBLE: &str = "s.deleted_at IS NULL AND s.merged_into IS NULL \
-     AND s.removed_at IS NULL AND s.held_at IS NULL";
+     AND s.removed_at IS NULL AND s.held_at IS NULL AND s.detached_at IS NULL";
 
 impl Store {
     pub async fn open(path: &str) -> Result<Store> {
