@@ -2,3 +2,6 @@
 
 pub mod apply;
 pub mod client;
+pub mod consumer;
+
+pub use consumer::Indexer;

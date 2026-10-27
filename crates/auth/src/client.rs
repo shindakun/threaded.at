@@ -22,6 +22,11 @@ impl Namespace {
     pub const PRODUCTION: Namespace = Namespace("at.threaded");
     pub const DEV: Namespace = Namespace("at.threaded.dev");
 
+    /// The namespace prefix, such as `at.threaded`.
+    pub fn prefix(self) -> &'static str {
+        self.0
+    }
+
     pub fn submission(self) -> String {
         format!("{}.submission", self.0)
     }

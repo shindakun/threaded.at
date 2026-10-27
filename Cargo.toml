@@ -19,6 +19,7 @@ license.workspace = true
 axum = "0.8.9"
 threaded-auth = { version = "0.1.0", path = "crates/auth" }
 threaded-core = { version = "0.1.0", path = "crates/core" }
+threaded-indexer = { version = "0.1.0", path = "crates/indexer" }
 threaded-store = { version = "0.1.0", path = "crates/store" }
 threaded-triage = { version = "0.1.0", path = "crates/triage" }
 threaded-web = { version = "0.1.0", path = "crates/web" }

@@ -41,7 +41,7 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Action {
     Create,
@@ -50,7 +50,7 @@ pub enum Action {
 }
 
 /// A record created, updated, or deleted in a repository.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct RecordEvent {
     /// `true` for live ingestion, `false` for backfill.
     pub live: bool,
@@ -60,9 +60,9 @@ pub struct RecordEvent {
     pub rkey: String,
     pub action: Action,
     /// The record body; absent for deletes.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub record: Option<serde_json::Value>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cid: Option<String>,
 }
 

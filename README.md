@@ -67,6 +67,7 @@ its API on `./hydrant.sock`.
 | `THREADED_OAUTH_KEY` | required with `THREADED_PUBLIC_URL` |
 | `THREADED_COOKIE_KEY` | required with `THREADED_PUBLIC_URL`; unset in development means sessions end on restart |
 | `THREADED_ANTHROPIC_KEY` | a file holding an Anthropic API key; unset turns AI triage off |
+| `THREADED_HYDRANT_SOCKET` | hydrant's API socket, such as `./hydrant.sock` from `make hydrant`; unset reads no records from the network |
 | `RUST_LOG` | `info` |
 
 ## Signing in locally

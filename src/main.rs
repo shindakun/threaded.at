@@ -24,7 +24,8 @@ environment:
                        the localhost development OAuth client
   THREADED_OAUTH_KEY   OAuth signing key file; required with THREADED_PUBLIC_URL
   THREADED_COOKIE_KEY  cookie key file; required with THREADED_PUBLIC_URL
-  THREADED_ANTHROPIC_KEY  Anthropic API key file; unset turns AI triage off";
+  THREADED_ANTHROPIC_KEY  Anthropic API key file; unset turns AI triage off
+  THREADED_HYDRANT_SOCKET hydrant's API socket; unset reads no records from the network";
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -198,6 +199,26 @@ async fn serve(db: &str) -> Result<(), BoxError> {
             }
         }
         None => tracing::info!("AI triage is off: THREADED_ANTHROPIC_KEY is unset"),
+    }
+    match env("THREADED_HYDRANT_SOCKET") {
+        Some(socket) => {
+            let prefix = state.auth.clients.ns.prefix();
+            let policy = state.policy.clone();
+            let triage = state.clone();
+            let indexer = threaded_indexer::Indexer::new(
+                state.store.clone(),
+                threaded_indexer::client::Hydrant::new(&socket),
+                threaded_indexer::apply::Collections::under(prefix),
+                std::sync::Arc::new(move || policy.read().map(|p| p.clone()).unwrap_or_default()),
+                std::sync::Arc::new(move || triage.triage_on()),
+                std::sync::Arc::new(unix_now),
+            );
+            tracing::info!(socket, records = prefix, "reading records from hydrant");
+            tokio::spawn(indexer.run());
+        }
+        None => {
+            tracing::info!("THREADED_HYDRANT_SOCKET is unset: reading no records from the network")
+        }
     }
     let app = threaded_web::router(state);
     let listener = tokio::net::TcpListener::bind(&addr).await?;

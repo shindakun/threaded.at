@@ -4074,6 +4074,7 @@ dependencies = [
  "axum",
  "threaded-auth",
  "threaded-core",
+ "threaded-indexer",
  "threaded-store",
  "threaded-triage",
  "threaded-web",

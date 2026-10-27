@@ -96,3 +96,92 @@ impl Store {
         Ok(())
     }
 }
+
+/// A record waiting for the story or comment it refers to.
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+pub struct PendingRecord {
+    pub id: i64,
+    pub uri: String,
+    /// The event as JSON, applied again once its subject arrives.
+    pub event: String,
+}
+
+impl Store {
+    /// The next stream event ID to read, or `None` before the first.
+    pub async fn stream_cursor(&self) -> Result<Option<u64>> {
+        let next: Option<i64> =
+            sqlx::query_scalar("SELECT next_id FROM stream_cursor WHERE id = 1")
+                .fetch_optional(self.pool())
+                .await?;
+        Ok(next.map(|n| n as u64))
+    }
+
+    pub async fn set_stream_cursor(&self, next: u64, now: i64) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO stream_cursor (id, next_id, updated_at) VALUES (1, ?, ?) \
+             ON CONFLICT(id) DO UPDATE SET next_id = excluded.next_id, updated_at = excluded.updated_at",
+        )
+        .bind(next as i64)
+        .bind(now)
+        .execute(self.pool())
+        .await?;
+        Ok(())
+    }
+
+    /// Holds a record until `waits_for` is indexed. Holding it again
+    /// replaces the earlier copy.
+    pub async fn hold_pending(
+        &self,
+        uri: &str,
+        waits_for: &str,
+        event: &str,
+        now: i64,
+    ) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO pending_records (uri, waits_for, event, created_at) VALUES (?, ?, ?, ?) \
+             ON CONFLICT(uri) DO UPDATE SET waits_for = excluded.waits_for, event = excluded.event",
+        )
+        .bind(uri)
+        .bind(waits_for)
+        .bind(event)
+        .bind(now)
+        .execute(self.pool())
+        .await?;
+        Ok(())
+    }
+
+    /// Records waiting for this AT-URI, oldest first.
+    pub async fn pending_for(&self, waits_for: &str) -> Result<Vec<PendingRecord>> {
+        sqlx::query_as("SELECT id, uri, event FROM pending_records WHERE waits_for = ? ORDER BY id")
+            .bind(waits_for)
+            .fetch_all(self.pool())
+            .await
+    }
+
+    pub async fn drop_pending(&self, id: i64) -> Result<()> {
+        sqlx::query("DELETE FROM pending_records WHERE id = ?")
+            .bind(id)
+            .execute(self.pool())
+            .await?;
+        Ok(())
+    }
+
+    /// Drops a waiting record by its own AT-URI, as when it is deleted before
+    /// its subject arrives. Returns whether one was waiting.
+    pub async fn drop_pending_uri(&self, uri: &str) -> Result<bool> {
+        let r = sqlx::query("DELETE FROM pending_records WHERE uri = ?")
+            .bind(uri)
+            .execute(self.pool())
+            .await?;
+        Ok(r.rows_affected() > 0)
+    }
+
+    /// Drops records that waited since before `before`. Returns how many.
+    pub async fn expire_pending(&self, before: i64) -> Result<u64> {
+        let r = sqlx::query("DELETE FROM pending_records WHERE created_at < ?")
+            .bind(before)
+            .execute(self.pool())
+            .await?;
+        Ok(r.rows_affected())
+    }
+}
