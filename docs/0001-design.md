@@ -308,9 +308,10 @@ The database is an index over records, plus the private tables in §3.1.
    PDS, then inserts the index row with the returned URI and CID in the same
    request.
 2. **hydrant.** A [hydrant](https://hydrant.klbr.net) indexer runs beside
-   Threaded in `filter` mode. `FILTER_SIGNALS` lists the exact NSIDs
-   `at.threaded.submission` and `at.threaded.comment`, and `collections` lists
-   those two and `at.threaded.vote`. The list is exact, not `at.threaded.*`:
+   Threaded in `filter` mode. `FILTER_SIGNALS` and `collections` list the
+   exact NSIDs `at.threaded.submission`, `at.threaded.comment`, and
+   `at.threaded.vote`. Votes are a signal because hydrant drops an account
+   with no signal record, so an account that only votes would never arrive. The list is exact, not `at.threaded.*`:
    a wildcard matches by prefix and would also store `at.threaded.dev.*`
    records. hydrant finds accounts two ways: live commits that touch a
    signal collection, and its crawler's `com.atproto.sync.listReposByCollection`
@@ -331,9 +332,9 @@ banned DIDs are not indexed.
 An `at.threaded.vote` record counts only when its author has signed in to
 Threaded and may upvote, and only once per account and subject: a published
 vote and the same user's vote row are one vote. Vote records from accounts
-that have never signed in are ignored. Threaded adds every signed-in DID to hydrant
-through its `/repos` endpoint, so a user's vote records arrive even if they
-never submit or comment.
+that have never signed in are ignored. Threaded also adds every signed-in DID to
+hydrant through its `/repos` endpoint, so an account hydrant's crawler has
+not listed yet is backfilled.
 
 ### 3.5 Edits and deletes
 

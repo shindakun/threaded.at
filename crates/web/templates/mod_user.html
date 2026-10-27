@@ -7,7 +7,7 @@
   <dt>DID</dt><dd><code>{{ did }}</code></dd>
   <dt>Role</dt><dd>{{ role }}</dd>
   <dt>Level</dt><dd>{{ level }}</dd>
-  <dt>Joined</dt><dd>{{ joined }} ({{ tenure_days }} days)</dd>
+  <dt>Joined</dt><dd>{{ joined }} ({{ tenure_days }} {% if tenure_days == 1 %}day{% else %}days{% endif %})</dd>
   <dt>Karma</dt><dd>{{ karma }}</dd>
   <dt>Removals</dt><dd>{{ removals }}</dd>
   <dt>Flags received</dt><dd>{% if flags_received.is_empty() %}none{% else %}{% for f in flags_received %}{{ f.0 }} ({{ f.1 }}){% if !loop.last %}, {% endif %}{% endfor %}{% endif %}</dd>

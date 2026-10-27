@@ -13,7 +13,7 @@ seed: ## Load demo tags and stories into an empty database
 
 # A hydrant build; see docs/0006-m4.md. Override with HYDRANT=/path/to/hydrant.
 HYDRANT ?= ../hydrant/target/release/hydrant
-DEV_NSIDS = at.threaded.dev.submission,at.threaded.dev.comment
+DEV_NSIDS = at.threaded.dev.submission,at.threaded.dev.comment,at.threaded.dev.vote
 
 hydrant: ## Run a local hydrant indexing at.threaded.dev.* records, on ./hydrant.sock
 	@test -x "$(HYDRANT)" || { echo "no hydrant binary at $(HYDRANT): build it (docs/0006-m4.md) or set HYDRANT=path"; exit 1; }
@@ -22,7 +22,7 @@ hydrant: ## Run a local hydrant indexing at.threaded.dev.* records, on ./hydrant
 	HYDRANT_PLC_URL=https://plc.directory \
 	HYDRANT_DATA_COMPRESSION=lz4 \
 	HYDRANT_FILTER_SIGNALS=$(DEV_NSIDS) \
-	HYDRANT_FILTER_COLLECTIONS=$(DEV_NSIDS),at.threaded.dev.vote \
+	HYDRANT_FILTER_COLLECTIONS=$(DEV_NSIDS) \
 	RUST_LOG=$${RUST_LOG:-info} \
 	"$(HYDRANT)"
 

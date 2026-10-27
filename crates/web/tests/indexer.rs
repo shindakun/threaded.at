@@ -296,5 +296,9 @@ async fn user_review_works_with_the_indexer_off() {
     w.role("mod.example", "moderator").await;
     let page = w.get("/mod/u/did:plc:mod", &moderator).await.body;
     assert!(page.contains("The indexer is off."), "{page}");
+    assert!(page.contains("(100 days)"), "{page}");
     assert!(page.contains("mod.example <span"), "{page}");
+    w.user("new.example", &base(), 1, 0).await;
+    let page = w.get("/mod/u/did:plc:new", &moderator).await.body;
+    assert!(page.contains("(1 day)"), "{page}");
 }

@@ -290,7 +290,9 @@ journalctl -u threaded | grep "hydrant's stream"
 ```
 
 The log line shows Threaded reading the stream. At startup Threaded also asks
-hydrant to track every account that has signed in, so their votes arrive.
+hydrant to track every account that has signed in. An account with no
+Threaded records yet shows on user review as unknown to hydrant until it
+posts, comments, or votes.
 `/admin` shows the stream's lag and any records waiting for their story.
 
 **Updating hydrant.** Run `build-hydrant.sh` again, install the binary, and
