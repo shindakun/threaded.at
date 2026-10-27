@@ -39,7 +39,7 @@ section 16.
 
 ## Quick start
 
-Requires a stable Rust toolchain.
+Requires a stable Rust toolchain, from [rustup](https://github.com/rust-lang/rustup).
 
 ```sh
 make seed    # demo tags and stories into threaded.db
@@ -49,14 +49,16 @@ make a11y    # axe-core audit of every page, light and dark
 make hydrant # a local hydrant indexing at.threaded.dev.* records
 ```
 
-`make help` lists every target. `make audit` needs `cargo-audit`, `make md-lint`
-needs `markdownlint-cli2`, `make lex-lint` and `make lex-validate` need
-[goat](https://github.com/bluesky-social/goat), `make a11y` needs Node and
-Chrome (set `CHROME` if Chrome is not in its default place), `make hooks`
-needs `pre-commit`, and `make hydrant` needs a hydrant build at
-`../hydrant/target/release/hydrant` (set `HYDRANT` to use another path; building
-it is in `docs/0006-m4.md`). It keeps its database in `./hydrant.db` and serves
-its API on `./hydrant.sock`.
+`make help` lists every target. Some need tools beyond Rust:
+
+| Target | Needs |
+|---|---|
+| `make audit` | [cargo-audit](https://github.com/rustsec/rustsec/tree/main/cargo-audit) |
+| `make md-lint` | [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) |
+| `make lex-lint`, `make lex-validate` | [goat](https://github.com/bluesky-social/goat) |
+| `make a11y` | [Node](https://github.com/nodejs/node) and Chrome or [Chromium](https://chromium.googlesource.com/chromium/src) (set `CHROME` if it is not in its default place); it installs [puppeteer-core](https://github.com/puppeteer/puppeteer) and [axe-core](https://github.com/dequelabs/axe-core) itself |
+| `make hooks` | [pre-commit](https://github.com/pre-commit/pre-commit) |
+| `make hydrant` | a [hydrant](https://tangled.org/did:plc:dfl62fgb7wtjj3fcbb72naae/hydrant) build at `../hydrant/target/release/hydrant` (set `HYDRANT` for another path; building it is in `docs/0006-m4.md`). It keeps its database in `./hydrant.db` and serves its API on `./hydrant.sock` |
 
 | Variable | Default |
 |---|---|
@@ -175,6 +177,15 @@ deploy/            systemd units, nginx config, backup and update scripts
 docs/              design doc, deploy doc, milestone plans, and deck
 third_party/       jacquard crates patched onto fixed crypto; see its README
 ```
+
+Built on [axum](https://github.com/tokio-rs/axum),
+[askama](https://github.com/askama-rs/askama),
+[sqlx](https://github.com/launchbadge/sqlx) with SQLite,
+[jacquard](https://tangled.org/nonbinary.computer/jacquard) for atproto and
+OAuth, [pulldown-cmark](https://github.com/pulldown-cmark/pulldown-cmark) and
+[ammonia](https://github.com/rust-ammonia/ammonia) for Markdown, and
+[hydrant](https://tangled.org/did:plc:dfl62fgb7wtjj3fcbb72naae/hydrant) for
+reading records from the network.
 
 ## License
 
