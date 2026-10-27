@@ -288,3 +288,87 @@ async fn an_unverified_handle_names_nobody() {
         .unwrap();
     assert_eq!(r.len(), 1, "a search by DID still works");
 }
+
+/// Migration 0007 rebuilds `mod_log`; every row written before it must come
+/// through unchanged.
+#[tokio::test]
+async fn migration_0007_keeps_every_mod_log_row() {
+    use std::str::FromStr;
+
+    let dir = tempfile::tempdir().unwrap();
+    let url = format!("sqlite:{}", dir.path().join("t.db").display());
+    let opts = sqlx::sqlite::SqliteConnectOptions::from_str(&url)
+        .unwrap()
+        .create_if_missing(true)
+        .foreign_keys(true);
+    let pool = sqlx::SqlitePool::connect_with(opts).await.unwrap();
+    let mut through_6 = sqlx::migrate!("../../migrations");
+    through_6.migrations = through_6
+        .migrations
+        .iter()
+        .filter(|m| m.version <= 6)
+        .cloned()
+        .collect::<Vec<_>>()
+        .into();
+    through_6.run(&pool).await.unwrap();
+
+    sqlx::query(
+        "INSERT INTO users (id, did, handle, created_at) VALUES (1, 'did:plc:m', 'm.example', 0), \
+         (2, 'did:plc:u', 'u.example', 0)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO mod_log (id, moderator_id, actor, action, user_id, reason, detail, created_at) VALUES \
+         (1, 1, 'moderator', 'ban', 2, 'Spam', '', 10), \
+         (2, NULL, 'console', 'grant role', 1, 'From the console', 'user to admin', 20), \
+         (3, NULL, 'triage', 'hold story', 2, 'Spam', '', 30)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    type Row = (
+        i64,
+        Option<i64>,
+        String,
+        String,
+        Option<i64>,
+        String,
+        String,
+        i64,
+    );
+    let read = |pool: sqlx::SqlitePool| async move {
+        sqlx::query_as::<_, Row>(
+            "SELECT id, moderator_id, actor, action, user_id, reason, detail, created_at \
+             FROM mod_log ORDER BY id",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+    };
+    let before = read(pool.clone()).await;
+    pool.close().await;
+
+    // Opening the store applies 0007 and anything after it.
+    let s = Store::open(&url).await.unwrap();
+    assert_eq!(read(s.pool().clone()).await, before);
+    let check: String = sqlx::query_scalar("PRAGMA integrity_check")
+        .fetch_one(s.pool())
+        .await
+        .unwrap();
+    assert_eq!(check, "ok");
+    // The rebuilt table takes the new actor and still refuses unknown ones.
+    sqlx::query(
+        "INSERT INTO mod_log (actor, action, created_at) VALUES ('indexer', 'detach story', 40)",
+    )
+    .execute(s.pool())
+    .await
+    .unwrap();
+    assert!(sqlx::query(
+        "INSERT INTO mod_log (actor, action, created_at) VALUES ('robot', 'x', 50)"
+    )
+    .execute(s.pool())
+    .await
+    .is_err());
+}

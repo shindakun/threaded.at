@@ -262,3 +262,116 @@ async fn roles_are_granted_by_did_and_never_to_yourself() {
         "{log}"
     );
 }
+
+#[tokio::test]
+async fn the_triage_breaker_opens_and_an_admin_resets_it() {
+    let w = world_with_triage().await;
+    let admin = w.user("admin.example", &base(), 100, 0).await;
+    w.role("admin.example", "admin").await;
+    let moderator = w.user("mod.example", &base(), 100, 0).await;
+    w.role("mod.example", "moderator").await;
+    w.user("alice.example", &base(), 100, 0).await;
+    let author: i64 = sqlx::query_scalar("SELECT id FROM users WHERE did = 'did:plc:alice'")
+        .fetch_one(w.store.pool())
+        .await
+        .unwrap();
+    // Twenty holds that moderators released: precision 0, under the floor.
+    for i in 0..threaded_store::BREAKER_MIN_DECIDED {
+        let link = threaded_core::link::parse(&format!("https://e.example/b{i}")).unwrap();
+        let short = w
+            .store
+            .insert_story(&threaded_store::NewStory {
+                user_id: author,
+                title: "Held",
+                link: Some(&link),
+                body: "",
+                user_is_author: false,
+                tags: &["rust"],
+                created_at: NOW - 100,
+                record: None,
+            })
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO triage_verdicts (story_id, verdict, held, decision, decided_at, created_at) \
+             SELECT id, 'spam', 1, 'released', ?, ? FROM stories WHERE short_id = ?",
+        )
+        .bind(NOW - 10)
+        .bind(NOW - 50)
+        .bind(&short)
+        .execute(w.store.pool())
+        .await
+        .unwrap();
+    }
+    let page = w.get("/admin", &admin).await.body;
+    assert!(
+        page.contains("Off: moderators released too many holds."),
+        "{page}"
+    );
+    assert!(page.contains(r#"action="/admin/breaker""#));
+
+    let r = w
+        .post("/admin/breaker", &moderator, &[("reason", "x")])
+        .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN, "admins only");
+    let r = w.post("/admin/breaker", &admin, &[("reason", " ")]).await;
+    assert!(r.body.contains("Give a reason."), "{}", r.body);
+    let r = w
+        .post("/admin/breaker", &admin, &[("reason", "Rules rewritten")])
+        .await;
+    assert_eq!(r.location.as_deref(), Some("/admin?done=1"));
+    let page = w.get("/admin", &admin).await.body;
+    assert!(
+        page.contains("<dt>Automatic holds</dt><dd>On</dd>"),
+        "{page}"
+    );
+    assert!(!page.contains(r#"action="/admin/breaker""#));
+    let log = w.get("/moderations", "").await.body;
+    assert!(log.contains("admin.example: reset triage breaker"), "{log}");
+}
+
+#[tokio::test]
+async fn a_role_already_held_or_unknown_is_refused() {
+    let (w, admin, _) = setup().await;
+    w.user("carol.example", &base(), 100, 0).await;
+    let r = w
+        .post(
+            "/admin/people",
+            &admin,
+            &[
+                ("did", "did:plc:mod"),
+                ("role", "moderator"),
+                ("reason", "x"),
+            ],
+        )
+        .await;
+    assert!(
+        r.body.contains("They already hold that role."),
+        "{}",
+        r.body
+    );
+    let r = w
+        .post(
+            "/admin/people",
+            &admin,
+            &[
+                ("did", "did:plc:carol"),
+                ("role", "emperor"),
+                ("reason", "x"),
+            ],
+        )
+        .await;
+    assert!(r.body.contains("Pick a role."), "{}", r.body);
+    let r = w
+        .post(
+            "/admin/people",
+            &admin,
+            &[
+                ("did", "did:plc:carol"),
+                ("role", "moderator"),
+                ("reason", " "),
+            ],
+        )
+        .await;
+    assert!(r.body.contains("Give a reason."), "{}", r.body);
+}

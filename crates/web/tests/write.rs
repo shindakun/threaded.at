@@ -725,3 +725,324 @@ async fn an_inactive_authors_story_hides_from_readers_and_says_why_to_the_author
         StatusCode::OK
     );
 }
+
+/// Posts a comment and returns its short ID.
+async fn comment_on(w: &World, who: &str, story: &str, parent: &str, text: &str) -> String {
+    let r = w
+        .post(
+            "/comment",
+            who,
+            &[("story", story), ("parent", parent), ("text", text)],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER, "{}", r.body);
+    r.location
+        .unwrap()
+        .rsplit("#c-")
+        .next()
+        .unwrap()
+        .to_string()
+}
+
+async fn comment_score(w: &World, short_id: &str) -> (i64, i64) {
+    sqlx::query_as("SELECT score, flags FROM comments WHERE short_id = ?")
+        .bind(short_id)
+        .fetch_one(w.store.pool())
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn editing_a_comment_rewrites_its_record_in_place() {
+    let w = world().await;
+    let alice = w.user("alice.example", &base(), 100, 0).await;
+    let bob = w.user("bob.example", &base(), 100, 0).await;
+    let id = w
+        .submit(&alice, "Story", "https://e.example/ce", &["rust"])
+        .await;
+    let first = comment_on(&w, &bob, &id, "", "First").await;
+    let reply = comment_on(&w, &alice, &id, &first, "A reply.").await;
+
+    // The reply page shows the parent; signed out, it asks for sign-in.
+    let page = w.get(&format!("/c/{first}/reply"), &alice).await;
+    assert_eq!(page.status, StatusCode::OK);
+    assert!(page.body.contains("First"), "{}", page.body);
+    let r = w.get(&format!("/c/{first}/reply"), "").await;
+    assert!(r.location.unwrap().starts_with("/login?next="));
+
+    // Only the author opens the edit form or saves it.
+    let page = w.get(&format!("/c/{reply}/edit"), &alice).await;
+    assert_eq!(page.status, StatusCode::OK);
+    assert!(page.body.contains("A reply."));
+    for r in [
+        w.get(&format!("/c/{reply}/edit"), &bob).await,
+        w.post(&format!("/c/{reply}/edit"), &bob, &[("text", "Hijack")])
+            .await,
+    ] {
+        assert!(
+            r.body.contains("Only the author can change this comment."),
+            "{}",
+            r.body
+        );
+    }
+    let r = w
+        .post(&format!("/c/{reply}/edit"), &alice, &[("text", "  ")])
+        .await;
+    assert!(r.body.contains("Write something first."), "{}", r.body);
+
+    let r = w
+        .post(
+            &format!("/c/{reply}/edit"),
+            &alice,
+            &[("text", "A better reply.")],
+        )
+        .await;
+    assert_eq!(
+        r.location.as_deref(),
+        Some(format!("/s/{id}#c-{reply}").as_str())
+    );
+    let put = w.writes().last().cloned().unwrap();
+    assert_eq!((put.op, put.rkey.as_str()), ("put", "m2"));
+    let rec = put.record.unwrap();
+    assert_eq!(rec["text"], "A better reply.");
+    assert_eq!(
+        rec["subject"]["uri"],
+        "at://did:plc:alice/at.threaded.dev.submission/m0"
+    );
+    assert_eq!(
+        rec["parent"]["uri"], "at://did:plc:bob/at.threaded.dev.comment/m1",
+        "the edit keeps its place in the thread"
+    );
+    let page = w.get(&format!("/s/{id}"), &bob).await.body;
+    assert!(page.contains("A better reply.") && !page.contains("A reply."));
+    assert!(page.contains(r#"<span class="edited">edited</span>"#));
+
+    // A deleted comment cannot be edited or replied to.
+    w.post(&format!("/c/{first}/delete"), &bob, &[]).await;
+    let r = w.get(&format!("/c/{first}/edit"), &bob).await;
+    assert!(r.body.contains("Only the author can change this comment."));
+    assert_eq!(
+        w.get(&format!("/c/{first}/reply"), &alice).await.status,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
+async fn comments_take_upvotes_and_flags() {
+    let w = world().await;
+    let alice = w.user("alice.example", &base(), 100, 0).await;
+    let bob = w.user("bob.example", &base(), 100, 0).await;
+    let carol = w.user("carol.example", &base(), 100, 0).await;
+    let id = w
+        .submit(&alice, "Story", "https://e.example/cv", &["rust"])
+        .await;
+    let c = comment_on(&w, &bob, &id, "", "A comment").await;
+
+    let own = w
+        .post("/vote", &bob, &[("kind", "comment"), ("id", &c)])
+        .await;
+    assert!(own.body.contains("You cannot vote on your own post."));
+    w.post("/vote", &carol, &[("kind", "comment"), ("id", &c)])
+        .await;
+    assert_eq!(comment_score(&w, &c).await, (2, 0));
+    w.post("/vote", &carol, &[("kind", "comment"), ("id", &c)])
+        .await;
+    assert_eq!(
+        comment_score(&w, &c).await,
+        (1, 0),
+        "a second vote withdraws"
+    );
+
+    let r = w
+        .post(
+            "/flag",
+            &carol,
+            &[("kind", "comment"), ("id", &c), ("reason", "broken-link")],
+        )
+        .await;
+    assert!(
+        r.body.contains("Pick one of the listed reasons."),
+        "broken-link is a story reason"
+    );
+    let r = w
+        .post(
+            "/flag",
+            &carol,
+            &[("kind", "comment"), ("id", &c), ("reason", "troll")],
+        )
+        .await;
+    assert!(
+        r.body.contains("You cannot flag this."),
+        "flagging a comment needs karma as well as tenure"
+    );
+    let dave = w.user("dave.example", &base(), 100, 60).await;
+    let r = w
+        .post(
+            "/flag",
+            &dave,
+            &[("kind", "comment"), ("id", &c), ("reason", "troll")],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER, "{}", r.body);
+    assert_eq!(comment_score(&w, &c).await, (0, 1));
+    assert!(w
+        .get(&format!("/s/{id}"), &bob)
+        .await
+        .body
+        .contains("Flagged: Troll (1)"));
+
+    let r = w
+        .post("/vote", &carol, &[("kind", "comment"), ("id", "nope00")])
+        .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn flagging_a_publicly_upvoted_story_withdraws_the_vote_record() {
+    let w = world().await;
+    let alice = w.user("alice.example", &base(), 100, 0).await;
+    let bob = w.user("bob.example", &votes(), 100, 0).await;
+    let id = w
+        .submit(&alice, "Story", "https://e.example/fv", &["rust"])
+        .await;
+    w.post("/settings", &bob, &[("public_votes", "1")]).await;
+    w.post("/vote", &bob, &[("kind", "story"), ("id", &id)])
+        .await;
+    let created = w.writes().last().cloned().unwrap();
+    assert_eq!(
+        (created.op, created.collection.as_str()),
+        ("create", "at.threaded.dev.vote")
+    );
+
+    let r = w
+        .post(
+            "/flag",
+            &bob,
+            &[("kind", "story"), ("id", &id), ("reason", "spam")],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER, "{}", r.body);
+    let deleted = w.writes().last().cloned().unwrap();
+    assert_eq!(
+        (
+            deleted.op,
+            deleted.collection.as_str(),
+            deleted.rkey.as_str()
+        ),
+        ("delete", "at.threaded.dev.vote", created.rkey.as_str())
+    );
+    let (value, uri): (i64, Option<String>) =
+        sqlx::query_as("SELECT value, at_uri FROM votes WHERE user_id = (SELECT id FROM users WHERE did = 'did:plc:bob')")
+            .fetch_one(w.store.pool())
+            .await
+            .unwrap();
+    assert_eq!((value, uri), (-1, None), "the upvote became a flag");
+}
+
+#[tokio::test]
+async fn story_edit_errors_keep_what_was_typed() {
+    let w = world().await;
+    let alice = w.user("alice.example", &base(), 100, 0).await;
+    let bob = w.user("bob.example", &base(), 100, 0).await;
+    let id = w
+        .submit(&alice, "Original", "https://e.example/se", &["rust"])
+        .await;
+    let edit = format!("/s/{id}/edit");
+
+    let page = w.get(&edit, &alice).await;
+    assert_eq!(page.status, StatusCode::OK);
+    assert!(page.body.contains(r#"value="Original""#));
+    assert!(
+        !page.body.contains("readonly"),
+        "the link is open in the first hour"
+    );
+    assert!(w
+        .get(&edit, &bob)
+        .await
+        .body
+        .contains("Only the author can change this story."));
+
+    let long_title = "x".repeat(151);
+    let long_text = "y".repeat(5_001);
+    let cases: [(&[(&str, &str)], &str); 7] = [
+        (
+            &[
+                ("title", ""),
+                ("url", "https://e.example/se"),
+                ("tags", "rust"),
+            ],
+            "A title is 1 to 150 characters.",
+        ),
+        (
+            &[
+                ("title", &long_title),
+                ("url", "https://e.example/se"),
+                ("tags", "rust"),
+            ],
+            "A title is 1 to 150 characters.",
+        ),
+        (
+            &[
+                ("title", "Kept title"),
+                ("url", "ftp://e.example/x"),
+                ("tags", "rust"),
+            ],
+            "The link is not usable",
+        ),
+        (
+            &[
+                ("title", "Kept title"),
+                ("url", ""),
+                ("text", ""),
+                ("tags", "rust"),
+            ],
+            "Add a link, some text, or both.",
+        ),
+        (
+            &[("title", "Kept title"), ("url", "https://e.example/se")],
+            "Pick at least one tag.",
+        ),
+        (
+            &[
+                ("title", "Kept title"),
+                ("url", "https://e.example/se"),
+                ("tags", "nosuch"),
+            ],
+            "There is no tag",
+        ),
+        (
+            &[
+                ("title", "Kept title"),
+                ("url", "https://e.example/se"),
+                ("text", &long_text),
+                ("tags", "rust"),
+            ],
+            "Text is limited to 5000 characters.",
+        ),
+    ];
+    let writes = w.writes().len();
+    for (form, want) in cases {
+        let r = w.post(&edit, &alice, form).await;
+        assert!(r.body.contains(want), "{want}: {}", r.body);
+        let title = form.iter().find(|(k, _)| *k == "title").unwrap().1;
+        if title == "Kept title" {
+            assert!(
+                r.body.contains(r#"value="Kept title""#),
+                "the form keeps the title"
+            );
+        }
+    }
+    assert_eq!(w.writes().len(), writes, "a refused edit writes nothing");
+    let title: String = sqlx::query_scalar("SELECT title FROM stories WHERE short_id = ?")
+        .bind(&id)
+        .fetch_one(w.store.pool())
+        .await
+        .unwrap();
+    assert_eq!(title, "Original");
+
+    // After the edit window the form shows the link as fixed.
+    let later = world_at(NOW + 7_200, Some((w.store.clone(), w.repo.clone()))).await;
+    let alice_later = later.user("alice.example", &base(), 100, 0).await;
+    let page = later.get(&edit, &alice_later).await.body;
+    assert!(page.contains("The link is fixed one hour after posting."));
+}

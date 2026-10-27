@@ -11,4 +11,5 @@ threaded-core = { version = "0.1.0", path = "../core" }
 sqlx = { version = "0.8.6", default-features = false, features = ["sqlite", "runtime-tokio", "macros", "migrate"] }
 
 [dev-dependencies]
+tempfile = "3.27.0"
 tokio = { version = "1.54.1", features = ["rt", "macros"] }

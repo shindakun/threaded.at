@@ -27,6 +27,10 @@ tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "s
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
+[dev-dependencies]
+sqlx = { version = "0.8.6", default-features = false, features = ["sqlite", "runtime-tokio"] }
+tempfile = "3.27.0"
+
 [profile.release]
 lto = true
 strip = true

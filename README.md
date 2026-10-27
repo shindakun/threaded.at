@@ -12,6 +12,7 @@ records in the author's own repo.
 - [docs/0004-m2.md](docs/0004-m2.md): the M2 plan, writing.
 - [docs/0005-m3.md](docs/0005-m3.md): the M3 plan, moderation.
 - [docs/0006-m4.md](docs/0006-m4.md): the M4 plan, the indexer.
+- [docs/0007-test-sweep.md](docs/0007-test-sweep.md): the test sweep before M5, and what it leaves for later.
 - [lexicons/at/threaded/](lexicons/at/threaded/): the submission, comment, and
   public vote schemas.
 - [HUMANS.md](HUMANS.md): the standard for LLM-assisted contributions.

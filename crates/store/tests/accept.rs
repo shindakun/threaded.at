@@ -342,3 +342,144 @@ async fn comments_on_locked_stories_are_refused() {
         .unwrap();
     assert_eq!(r, Err(Refusal::Locked));
 }
+
+fn top_level<'a>(story: &'a threaded_store::StoryRow, text: &'a str) -> CommentInput<'a> {
+    CommentInput {
+        story,
+        parent: None,
+        text,
+    }
+}
+
+#[tokio::test]
+async fn comment_refusals_and_the_hourly_limit() {
+    let s = store().await;
+    let alice = user(&s, "alice", 100).await;
+    let newbie = user(&s, "newbie", 3).await;
+    let p = Policy::default();
+    let web = cx(&p, Source::Web, false);
+    let t = tags(&["rust"]);
+    let mut stories = Vec::new();
+    for n in 0..2 {
+        let acc = s
+            .accept_story(
+                &alice,
+                &story("S", &format!("https://e.example/c{n}"), &t),
+                (&format!("at://a/s/c{n}"), "c"),
+                &web,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        stories.push(s.story(&acc.short_id).await.unwrap().unwrap());
+    }
+    let (st, other) = (&stories[0], &stories[1]);
+    let input = |text| top_level(st, text);
+
+    let long = "w".repeat(5_001);
+    for (text, want) in [("   ", Refusal::NoText), (long.as_str(), Refusal::TooLong)] {
+        assert_eq!(
+            s.check_comment(&newbie, &top_level(st, text), &web)
+                .await
+                .unwrap(),
+            Err(want)
+        );
+    }
+
+    // A reply must be to a live comment on the same story.
+    let parent = s
+        .accept_comment(&alice, &input("Parent"), ("at://a/c/p", "c"), &web)
+        .await
+        .unwrap()
+        .unwrap();
+    let again = s
+        .accept_comment(&alice, &input("Parent"), ("at://a/c/p", "c"), &web)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        again.existing && again.id == parent.id,
+        "a known record is not indexed twice"
+    );
+    let p_row = s.comment(&parent.short_id).await.unwrap().unwrap();
+    let elsewhere = CommentInput {
+        story: other,
+        parent: Some(&p_row),
+        text: "Wrong story",
+    };
+    assert_eq!(
+        s.check_comment(&newbie, &elsewhere, &web).await.unwrap(),
+        Err(Refusal::ParentClosed)
+    );
+    s.delete_comment(&p_row, NOW).await.unwrap();
+    let p_row = s.comment(&parent.short_id).await.unwrap().unwrap();
+    let to_deleted = CommentInput {
+        story: st,
+        parent: Some(&p_row),
+        text: "Too late",
+    };
+    assert_eq!(
+        s.check_comment(&newbie, &to_deleted, &web).await.unwrap(),
+        Err(Refusal::ParentClosed)
+    );
+
+    // A new account posts six comments an hour; the seventh waits.
+    let (_, per_hour) = p.new_limits;
+    for n in 0..per_hour {
+        s.accept_comment(&newbie, &input("Hi"), (&format!("at://n/c/{n}"), "c"), &web)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+    assert_eq!(
+        s.accept_comment(&newbie, &input("Hi"), ("at://n/c/x", "c"), &web)
+            .await
+            .unwrap(),
+        Err(Refusal::CommentLimit(per_hour))
+    );
+    let hour_later = Context {
+        now: NOW + 3_601,
+        ..web
+    };
+    assert_eq!(
+        s.check_comment(&newbie, &input("Hi"), &hour_later)
+            .await
+            .unwrap(),
+        Ok(())
+    );
+}
+
+#[tokio::test]
+async fn tags_closed_to_new_accounts() {
+    let s = store().await;
+    sqlx::query("UPDATE tags SET new_users_ok = 0 WHERE name = 'show'")
+        .execute(s.pool())
+        .await
+        .unwrap();
+    let member = user(&s, "member", 100).await;
+    let newbie = user(&s, "newbie", 3).await;
+    let p = Policy::default();
+    let web = cx(&p, Source::Web, false);
+    let net = cx(&p, Source::Network, false);
+
+    assert_eq!(
+        s.check_tags(&newbie, &tags(&["rust", "show"]), &web)
+            .await
+            .unwrap(),
+        Err(Refusal::Restricted("show".into()))
+    );
+    assert_eq!(
+        s.check_tags(&newbie, &tags(&["rust", "show", "mods"]), &net)
+            .await
+            .unwrap(),
+        Ok(tags(&["rust"])),
+        "the network drops tags the author may not use"
+    );
+    assert_eq!(
+        s.check_tags(&member, &tags(&["show", "rust", "show"]), &web)
+            .await
+            .unwrap(),
+        Ok(tags(&["show", "rust"])),
+        "members may; a repeated tag counts once"
+    );
+}

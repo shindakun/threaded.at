@@ -587,3 +587,302 @@ async fn a_handle_belongs_to_whichever_account_verified_it_last() {
         "the new owner's profile does not show the old owner's posts"
     );
 }
+
+#[tokio::test]
+async fn comment_review_removes_and_restores() {
+    let (w, author, reader, moderator, id) = setup().await;
+    let r = w
+        .post(
+            "/comment",
+            &author,
+            &[("story", &id), ("text", "Rude words")],
+        )
+        .await;
+    let c = r
+        .location
+        .unwrap()
+        .rsplit("#c-")
+        .next()
+        .unwrap()
+        .to_string();
+    let url = format!("/mod/c/{c}");
+
+    assert_eq!(w.get(&url, &reader).await.status, StatusCode::FORBIDDEN);
+    let page = w.get(&url, &moderator).await.body;
+    assert!(
+        page.contains("Review comment") && page.contains("Rude words"),
+        "{page}"
+    );
+    assert!(page.contains(r#"value="remove""#) && !page.contains("Removed:"));
+    assert_eq!(
+        w.get("/mod/c/nope00", &moderator).await.status,
+        StatusCode::NOT_FOUND
+    );
+
+    let r = w
+        .post(
+            &url,
+            &moderator,
+            &[("action", "remove"), ("reason", "Unkind")],
+        )
+        .await;
+    assert_eq!(
+        r.location.as_deref(),
+        Some(format!("{url}?done=1").as_str())
+    );
+    let page = w.get(&url, &moderator).await.body;
+    assert!(page.contains("Removed: Unkind") && page.contains(r#"value="restore""#));
+    assert!(!w
+        .get(&format!("/s/{id}"), &reader)
+        .await
+        .body
+        .contains("Rude words"));
+    let r = w
+        .post(
+            &url,
+            &moderator,
+            &[("action", "remove"), ("reason", "Again")],
+        )
+        .await;
+    assert!(r.body.contains("It is already removed."), "{}", r.body);
+    let r = w
+        .post(&url, &moderator, &[("action", "lock"), ("reason", "x")])
+        .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND, "comments have no lock");
+
+    w.post(
+        &url,
+        &moderator,
+        &[("action", "restore"), ("reason", "Fair")],
+    )
+    .await;
+    assert!(w
+        .get(&format!("/s/{id}"), &reader)
+        .await
+        .body
+        .contains("Rude words"));
+    let log = w.get("/moderations", "").await.body;
+    assert!(
+        log.contains("mod.example: remove comment") && log.contains("mod.example: restore comment"),
+        "{log}"
+    );
+}
+
+#[tokio::test]
+async fn unban_and_badge_removal_are_logged() {
+    let (w, author, _reader, moderator, _id) = setup().await;
+    let user = "/mod/u/did:plc:alice";
+    let r = w
+        .post(user, &moderator, &[("action", "unban"), ("reason", "x")])
+        .await;
+    assert!(r.body.contains("That account is not banned."), "{}", r.body);
+    w.post(user, &moderator, &[("action", "ban"), ("reason", "Spam")])
+        .await;
+    let r = w
+        .post(
+            user,
+            &moderator,
+            &[("action", "unban"), ("reason", "Appeal")],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER, "{}", r.body);
+    let r = w
+        .post(
+            "/submit",
+            &author,
+            &[
+                ("title", "Back"),
+                ("url", "https://e.example/back"),
+                ("tags", "rust"),
+            ],
+        )
+        .await;
+    assert_eq!(
+        r.status,
+        StatusCode::SEE_OTHER,
+        "an unbanned account posts again"
+    );
+
+    w.post(
+        user,
+        &moderator,
+        &[
+            ("action", "badge"),
+            ("label", "Maintainer"),
+            ("reason", "Runs it"),
+        ],
+    )
+    .await;
+    let badge: i64 = sqlx::query_scalar("SELECT id FROM role_badges")
+        .fetch_one(w.store.pool())
+        .await
+        .unwrap();
+    // A badge is removed only from the account that holds it.
+    w.user("carol.example", &base(), 100, 0).await;
+    let r = w
+        .post(
+            "/mod/u/did:plc:carol",
+            &moderator,
+            &[
+                ("action", "unbadge"),
+                ("badge", &badge.to_string()),
+                ("reason", "x"),
+            ],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    let r = w
+        .post(user, &moderator, &[("action", "unbadge"), ("reason", "x")])
+        .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND, "no badge named");
+    let r = w
+        .post(
+            user,
+            &moderator,
+            &[
+                ("action", "unbadge"),
+                ("badge", &badge.to_string()),
+                ("reason", "Stepped down"),
+            ],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER, "{}", r.body);
+    assert!(!w.get("/", "").await.body.contains("Maintainer"));
+    let r = w
+        .post(user, &moderator, &[("action", "shout"), ("reason", "x")])
+        .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+
+    let log = w.get("/moderations", "").await.body;
+    assert!(
+        log.contains("mod.example: unban") && log.contains("mod.example: remove badge"),
+        "{log}"
+    );
+}
+
+#[tokio::test]
+async fn a_dismissed_suggestion_changes_nothing_and_is_logged() {
+    let (w, _author, reader, moderator, id) = setup().await;
+    let r = w
+        .post(
+            &format!("/s/{id}/suggest"),
+            &reader,
+            &[("title", "A worse title"), ("tags", "rust")],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER, "{}", r.body);
+    let q = w.get("/mod?tab=edits", &moderator).await.body;
+    let sugg = q
+        .split("/mod/suggestions/")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap()
+        .to_string();
+    let url = format!("/mod/suggestions/{sugg}");
+    let r = w
+        .post(&url, &moderator, &[("decision", "shelve"), ("reason", "x")])
+        .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    let r = w
+        .post(
+            &url,
+            &moderator,
+            &[("decision", "dismiss"), ("reason", " ")],
+        )
+        .await;
+    assert!(r.body.contains("Give a reason."), "{}", r.body);
+    let r = w
+        .post(
+            &url,
+            &moderator,
+            &[("decision", "dismiss"), ("reason", "Less clear")],
+        )
+        .await;
+    assert_eq!(r.location.as_deref(), Some("/mod?tab=edits&done=1"));
+    let page = w.get(&format!("/s/{id}"), "").await.body;
+    assert!(page.contains("A story") && !page.contains("A worse title"));
+    assert!(w
+        .get("/mod?tab=edits", &moderator)
+        .await
+        .body
+        .contains("No suggested edits."));
+    let log = w.get("/moderations", "").await.body;
+    assert!(
+        log.contains("dismiss suggestion") && log.contains("Less clear"),
+        "{log}"
+    );
+}
+
+#[tokio::test]
+async fn merge_and_edit_refuse_what_they_cannot_do() {
+    let (w, _author, _reader, moderator, id) = setup().await;
+    let url = format!("/mod/s/{id}");
+    let r = w
+        .post(
+            &url,
+            &moderator,
+            &[
+                ("action", "merge"),
+                ("into", "/s/nope00"),
+                ("reason", "Dupe"),
+            ],
+        )
+        .await;
+    assert!(
+        r.body.contains("There is no story with that ID."),
+        "{}",
+        r.body
+    );
+
+    let edit = |extra: Vec<(&'static str, &'static str)>| {
+        let mut f = vec![("action", "edit"), ("reason", "Tidy")];
+        f.extend(extra);
+        f
+    };
+    for (form, want) in [
+        (
+            edit(vec![("title", " "), ("tags", "rust")]),
+            "A title is 1 to 150 characters.",
+        ),
+        (
+            edit(vec![
+                ("title", "T"),
+                ("url", "ftp://e.example/"),
+                ("tags", "rust"),
+            ]),
+            "The link is not usable",
+        ),
+        (
+            edit(vec![("title", "T"), ("url", ""), ("tags", "rust")]),
+            "A story without text needs a link.",
+        ),
+        (
+            edit(vec![
+                ("title", "T"),
+                ("url", "https://e.example/story"),
+                ("tags", "nosuch"),
+            ]),
+            "There is no tag",
+        ),
+        (
+            edit(vec![("title", "T"), ("url", "https://e.example/story")]),
+            "Pick 1 to 5 tags.",
+        ),
+    ] {
+        let r = w.post(&url, &moderator, &form).await;
+        assert!(r.body.contains(want), "{want}: {}", r.body);
+    }
+    let r = w
+        .post(&url, &moderator, &[("action", "explode"), ("reason", "x")])
+        .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    let (title, mod_edited): (String, bool) =
+        sqlx::query_as("SELECT title, override_by IS NOT NULL FROM stories WHERE short_id = ?")
+            .bind(&id)
+            .fetch_one(w.store.pool())
+            .await
+            .unwrap();
+    assert_eq!((title.as_str(), mod_edited), ("A story", false));
+}

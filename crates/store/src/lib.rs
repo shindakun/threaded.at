@@ -115,7 +115,7 @@ pub(crate) const STORY_COLUMNS: &str =
      s.created_at, CASE WHEN u.handle_verified THEN u.handle ELSE u.did END AS handle, s.body, s.user_id, u.did AS author_did, s.user_is_author, s.flags, \
      s.edited_at, s.locked, s.at_uri, s.at_cid, s.removed_at, s.removed_reason, s.held_at, \
      (SELECT m.short_id FROM stories m WHERE m.id = s.merged_into) AS merged_into, \
-     s.locked_reason, s.override_by IS NOT NULL AS mod_edited, s.detached_at, \
+     s.locked_reason, s.override_at IS NOT NULL AS mod_edited, s.detached_at, \
      u.inactive_at IS NOT NULL AS author_inactive, \
      coalesce((SELECT group_concat(name, ' ') FROM \
          (SELECT t.name FROM taggings tg JOIN tags t ON t.id = tg.tag_id \

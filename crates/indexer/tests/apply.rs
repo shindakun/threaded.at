@@ -519,3 +519,282 @@ async fn network_accounts_get_new_user_limits() {
         Applied::Refused("You can submit 2 stories a day. Try again tomorrow.".into())
     );
 }
+
+const CAROL: &str = "did:plc:carol";
+
+async fn signed_in(t: &T, did: &str) -> i64 {
+    t.store
+        .record_sign_in(did, &format!("{}.example", &did[8..]), true, NOW)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn votes_on_comments_and_votes_that_do_not_count() {
+    let t = T::new().await;
+    let Applied::Indexed { short_id } = t
+        .apply(&story(ALICE, "s1", "S", "https://e.example/s", true))
+        .await
+    else {
+        panic!()
+    };
+    let s_uri = uri(ALICE, SUB, "s1");
+    let Applied::Indexed { short_id: c_id } = t
+        .apply(&comment(BOB, "c1", &s_uri, None, "A comment"))
+        .await
+    else {
+        panic!()
+    };
+    let c_uri = uri(BOB, COM, "c1");
+
+    // A vote on a comment counts on the comment.
+    signed_in(&t, CAROL).await;
+    assert_eq!(t.apply(&vote(CAROL, "v1", &c_uri)).await, Applied::Voted);
+    assert_eq!(
+        t.store.comment(&c_id).await.unwrap().unwrap().score,
+        2,
+        "the author's point and Carol's"
+    );
+
+    // Bob is known only from the network: his vote does not count.
+    assert_eq!(
+        t.apply(&vote(BOB, "v2", &s_uri)).await,
+        Applied::Ignored("the voter has not signed in here")
+    );
+
+    // A banned account may not upvote.
+    let dave = signed_in(&t, "did:plc:dave").await;
+    t.store
+        .set_banned(dave, true, By::Console, true, "Spam", NOW)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        t.apply(&vote("did:plc:dave", "v3", &s_uri)).await,
+        Applied::Ignored("the voter may not upvote")
+    );
+
+    // A vote for something not indexed yet waits for it.
+    let later = uri(ALICE, SUB, "s9");
+    assert_eq!(
+        t.apply(&vote(CAROL, "v4", &later)).await,
+        Applied::Pending { waits_for: later }
+    );
+
+    // An account that flagged the story cannot also upvote it by record.
+    let erin = signed_in(&t, "did:plc:erin").await;
+    let story_id = t.store.story(&short_id).await.unwrap().unwrap().id;
+    t.store
+        .set_vote(
+            erin,
+            Target::Story(story_id),
+            VoteChange::Flag { reason: "spam" },
+            NOW,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        t.apply(&vote("did:plc:erin", "v5", &s_uri)).await,
+        Applied::Ignored("the voter flagged it")
+    );
+
+    // Nobody votes on a locked story.
+    t.store
+        .set_locked(story_id, true, By::Console, "Closed", NOW)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        t.apply(&vote(CAROL, "v6", &s_uri)).await,
+        Applied::Ignored("the story is locked")
+    );
+
+    // Votes are never edited; deleting an unknown vote changes nothing.
+    let mut edit = vote(CAROL, "v1", &c_uri);
+    edit.action = Action::Update;
+    assert_eq!(
+        t.apply(&edit).await,
+        Applied::Ignored("votes are not edited")
+    );
+    let del = ev(CAROL, VOTE, "nope", Action::Delete, None, "", true);
+    assert_eq!(
+        t.apply(&del).await,
+        Applied::Ignored("the vote is not indexed")
+    );
+
+    // A vote on a deleted comment does not count.
+    let del = ev(BOB, COM, "c1", Action::Delete, None, "", true);
+    assert_eq!(t.apply(&del).await, Applied::Deleted);
+    let frank = signed_in(&t, "did:plc:frank").await;
+    let _ = frank;
+    assert_eq!(
+        t.apply(&vote("did:plc:frank", "v7", &c_uri)).await,
+        Applied::Ignored("the comment is deleted")
+    );
+}
+
+fn comment_update(rkey: &str, subject: &str, text: &str, cid: &str) -> RecordEvent {
+    let mut e = comment(BOB, rkey, subject, None, text);
+    e.action = Action::Update;
+    e.cid = Some(cid.into());
+    e
+}
+
+#[tokio::test]
+async fn comment_updates_apply_or_say_why_not() {
+    let t = T::new().await;
+    t.apply(&story(ALICE, "s1", "S", "https://e.example/s", true))
+        .await;
+    let s_uri = uri(ALICE, SUB, "s1");
+    assert_eq!(
+        t.apply(&comment_update("c0", &s_uri, "Never indexed", "cid-x"))
+            .await,
+        Applied::Ignored("the comment is not indexed")
+    );
+    let Applied::Indexed { short_id } = t.apply(&comment(BOB, "c1", &s_uri, None, "First")).await
+    else {
+        panic!()
+    };
+    assert_eq!(
+        t.apply(&comment_update("c1", &s_uri, "First", "cid-c1"))
+            .await,
+        Applied::Known,
+        "the stored CID changes nothing"
+    );
+    assert_eq!(
+        t.apply(&comment_update("c1", &s_uri, "  ", "cid-2")).await,
+        Applied::Refused("Write something first.".into())
+    );
+    assert_eq!(
+        t.apply(&comment_update("c1", &s_uri, &"z".repeat(5_001), "cid-3"))
+            .await,
+        Applied::Refused("Text is limited to 5000 characters.".into())
+    );
+    let mut bad = comment_update("c1", &s_uri, "x", "cid-4");
+    bad.record = Some(json!({"$type": COM, "text": 7}));
+    assert!(matches!(t.apply(&bad).await, Applied::Refused(_)));
+    assert_eq!(
+        t.store.comment(&short_id).await.unwrap().unwrap().body,
+        "First",
+        "refused updates change nothing"
+    );
+
+    assert_eq!(
+        t.apply(&comment_update("c1", &s_uri, "First, edited", "cid-5"))
+            .await,
+        Applied::Edited
+    );
+    let c = t.store.comment(&short_id).await.unwrap().unwrap();
+    assert_eq!(
+        (c.body.as_str(), c.edited_at.is_some()),
+        ("First, edited", true)
+    );
+
+    let del = ev(BOB, COM, "c1", Action::Delete, None, "", true);
+    t.apply(&del).await;
+    assert_eq!(
+        t.apply(&comment_update("c1", &s_uri, "Back again", "cid-6"))
+            .await,
+        Applied::Ignored("the comment is deleted")
+    );
+}
+
+#[tokio::test]
+async fn a_late_link_change_under_a_moderators_edit_logs_the_authors_link() {
+    let t = T::new().await;
+    let Applied::Indexed { short_id } = t
+        .apply(&story(
+            ALICE,
+            "s1",
+            "Title",
+            "https://e.example/author",
+            true,
+        ))
+        .await
+    else {
+        panic!()
+    };
+    let row = t.store.story(&short_id).await.unwrap().unwrap();
+    // Made by the console, which records no user: the edit must count as a
+    // moderator's whoever made it.
+    let mod_link = threaded_core::link::parse("https://e.example/moderator").unwrap();
+    t.store
+        .override_story(
+            &row,
+            &threaded_store::StoryOverride {
+                title: "Moderator title",
+                link: Some(&mod_link),
+                tags: &["rust".to_string()],
+            },
+            By::Console,
+            "Better link",
+            NOW,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    // The author's link stays the same: not a link change, even late.
+    let mut same = story(ALICE, "s1", "Author edit", "https://e.example/author", true);
+    same.action = Action::Update;
+    same.cid = Some("cid-2".into());
+    assert_eq!(t.apply_at(&same, NOW + 7_200, false).await, Applied::Edited);
+
+    let mut late = story(ALICE, "s1", "Author edit", "https://e.example/moved", true);
+    late.action = Action::Update;
+    late.cid = Some("cid-3".into());
+    assert_eq!(
+        t.apply_at(&late, NOW + 7_200, false).await,
+        Applied::Detached
+    );
+    let detail: String = sqlx::query_scalar(
+        "SELECT detail FROM mod_log WHERE action = 'detach story' AND actor = 'indexer'",
+    )
+    .fetch_one(t.store.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        detail, "from https://e.example/author to https://e.example/moved",
+        "the author's own link, not the moderator's"
+    );
+}
+
+#[tokio::test]
+async fn story_updates_with_bad_fields_are_refused() {
+    let t = T::new().await;
+    let mut orphan = story(ALICE, "s0", "T", "https://e.example/o", true);
+    orphan.action = Action::Update;
+    assert_eq!(
+        t.apply(&orphan).await,
+        Applied::Ignored("the story is not indexed")
+    );
+    let Applied::Indexed { short_id } = t
+        .apply(&story(ALICE, "s1", "Title", "https://e.example/s", true))
+        .await
+    else {
+        panic!()
+    };
+    for (title, url, want) in [
+        ("Title", "http://e.example/s", "The link is not usable"),
+        ("", "https://e.example/s", "A title is 1 to 150 characters."),
+    ] {
+        let mut e = story(ALICE, "s1", title, url, true);
+        e.action = Action::Update;
+        e.cid = Some(format!("cid-{want}"));
+        let got = t.apply(&e).await;
+        assert!(
+            matches!(&got, Applied::Refused(m) if m.contains(want)),
+            "{want}: {got:?}"
+        );
+    }
+    let mut no_tags = story(ALICE, "s1", "Title", "https://e.example/s", true);
+    no_tags.action = Action::Update;
+    no_tags.cid = Some("cid-t".into());
+    no_tags.record.as_mut().unwrap()["tags"] = json!(["unknown"]);
+    assert_eq!(
+        t.apply(&no_tags).await,
+        Applied::Refused("Pick at least one tag.".into())
+    );
+    let s = t.store.story(&short_id).await.unwrap().unwrap();
+    assert_eq!((s.title.as_str(), s.edited_at), ("Title", None));
+}

@@ -4072,6 +4072,8 @@ name = "threaded"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "sqlx",
+ "tempfile",
  "threaded-auth",
  "threaded-core",
  "threaded-indexer",
@@ -4147,6 +4149,7 @@ version = "0.1.0"
 dependencies = [
  "rand 0.9.5",
  "sqlx",
+ "tempfile",
  "thiserror",
  "threaded-core",
  "tokio",

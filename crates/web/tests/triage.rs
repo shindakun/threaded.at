@@ -183,3 +183,161 @@ async fn authors_can_keep_their_posts_out_of_triage() {
         "{q}"
     );
 }
+
+#[tokio::test]
+async fn comments_are_triaged_held_and_decided() {
+    let w = world_with_triage().await;
+    let admin = w.user("admin.example", &base(), 100, 0).await;
+    w.role("admin.example", "admin").await;
+    let alice = w.user("alice.example", &base(), 100, 0).await;
+    let bob = w.user("bob.example", &base(), 100, 0).await;
+    let reader = w.user("carol.example", &base(), 100, 0).await;
+    w.post(
+        "/admin/rules",
+        &admin,
+        &[("body", "No spam."), ("reason", "First")],
+    )
+    .await;
+    let id = w
+        .submit(&alice, "A story", "https://e.example/t", &["rust"])
+        .await;
+    let fake = Arc::new(Fake::default());
+    let t = Triager::Fake(fake.clone());
+    fake.reply("ok", "high");
+    step(&w.store, &t, &Policy::default(), NOW).await.unwrap();
+
+    let comment = |text: &'static str| {
+        let w = &w;
+        let id = id.clone();
+        let bob = bob.clone();
+        async move {
+            let r = w
+                .post("/comment", &bob, &[("story", id.as_str()), ("text", text)])
+                .await;
+            r.location
+                .unwrap()
+                .rsplit("#c-")
+                .next()
+                .unwrap()
+                .to_string()
+        }
+    };
+
+    // A spam comment is held: hidden from readers, explained to its author.
+    comment("Cheap watches here").await;
+    fake.reply("spam", "high");
+    assert_eq!(
+        step(&w.store, &t, &Policy::default(), NOW).await.unwrap(),
+        Step::Judged {
+            verdict: "spam".into(),
+            held: true
+        }
+    );
+    let sent = fake.requests.lock().unwrap().last().cloned().unwrap();
+    assert!(
+        sent.to_string().contains("Cheap watches here"),
+        "triage reads the comment"
+    );
+    let page = format!("/s/{id}");
+    assert!(!w.get(&page, &reader).await.body.contains("Cheap watches"));
+    assert!(w
+        .get(&page, &bob)
+        .await
+        .body
+        .contains("Held for review: spam (automated)"));
+    let holds = w.get("/mod?tab=holds", &admin).await.body;
+    assert!(holds.contains("Comment on A story"), "{holds}");
+    let vid = holds
+        .split("/mod/verdicts/")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap()
+        .to_string();
+    let r = w
+        .post(
+            &format!("/mod/verdicts/{vid}"),
+            &admin,
+            &[
+                ("decision", "confirmed"),
+                ("tab", "holds"),
+                ("reason", "Spam"),
+            ],
+        )
+        .await;
+    assert_eq!(r.location.as_deref(), Some("/mod?tab=holds&done=1"));
+    let r = w
+        .post(
+            &format!("/mod/verdicts/{vid}"),
+            &admin,
+            &[("decision", "released"), ("tab", "holds"), ("reason", "x")],
+        )
+        .await;
+    assert_eq!(
+        r.status,
+        StatusCode::NOT_FOUND,
+        "a decided verdict is no longer open"
+    );
+    assert!(w
+        .get(&page, &bob)
+        .await
+        .body
+        .contains("Removed by a moderator: Spam"));
+
+    // An off-topic comment is a suggestion; removing it from the queue removes it.
+    comment("Unrelated chatter").await;
+    fake.reply("off-topic", "medium");
+    step(&w.store, &t, &Policy::default(), NOW).await.unwrap();
+    assert!(w
+        .get(&page, &reader)
+        .await
+        .body
+        .contains("Unrelated chatter"));
+    let sugg = w.get("/mod?tab=suggestions", &admin).await.body;
+    let vid = sugg
+        .split("/mod/verdicts/")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap()
+        .to_string();
+    let r = w
+        .post(
+            &format!("/mod/verdicts/{vid}"),
+            &admin,
+            &[
+                ("decision", "removed"),
+                ("tab", "suggestions"),
+                ("reason", "Off-topic"),
+            ],
+        )
+        .await;
+    assert_eq!(r.location.as_deref(), Some("/mod?tab=suggestions&done=1"));
+    assert!(!w
+        .get(&page, &reader)
+        .await
+        .body
+        .contains("Unrelated chatter"));
+
+    // A comment deleted before triage reaches it is dropped from the queue.
+    let gone = comment("Never mind").await;
+    w.post(&format!("/c/{gone}/delete"), &bob, &[]).await;
+    assert_eq!(
+        step(&w.store, &t, &Policy::default(), NOW).await.unwrap(),
+        Step::Dropped
+    );
+    assert_eq!(
+        step(&w.store, &t, &Policy::default(), NOW).await.unwrap(),
+        Step::Idle
+    );
+
+    let log = w.get("/moderations", "").await.body;
+    assert!(
+        log.contains("triage: hold comment")
+            && log.contains("admin.example: confirm hold on comment")
+            && log.contains("admin.example: remove comment"),
+        "{log}"
+    );
+}
