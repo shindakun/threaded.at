@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Settings | {{ site }}<h2>AI triage</h2>
+{% if triage_on %}
 <p class="lead">New posts may be read by an AI model that checks them against the site rules and flags likely spam for a moderator. It never decides alone: a moderator confirms or releases every hold. You can keep your posts out of it; a moderator reviews them instead.</p>
+{% else %}
+<p class="lead">AI triage is not on yet: no post is read by an AI model. If it is turned on, it would check new posts against the site rules and flag likely spam for a moderator, who confirms or releases every hold. It may be something you opt in to rather than out of. You can keep your posts out of it now, and that choice stands either way.</p>
+{% endif %}
 <form method="post" action="/settings/triage" class="post-form">
   <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
   <label class="check-line"><input type="checkbox" name="opt_out" value="1"{% if triage_opt_out %} checked{% endif %}> Keep my posts out of AI triage</label>
@@ -30,7 +34,11 @@
 </form>
 {% endif %}
 <h2>AI triage</h2>
+{% if triage_on %}
 <p class="lead">New posts may be read by an AI model that checks them against the site rules and flags likely spam for a moderator. It never decides alone: a moderator confirms or releases every hold. You can keep your posts out of it; a moderator reviews them instead.</p>
+{% else %}
+<p class="lead">AI triage is not on yet: no post is read by an AI model. If it is turned on, it would check new posts against the site rules and flag likely spam for a moderator, who confirms or releases every hold. It may be something you opt in to rather than out of. You can keep your posts out of it now, and that choice stands either way.</p>
+{% endif %}
 <form method="post" action="/settings/triage" class="post-form">
   <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
   <label class="check-line"><input type="checkbox" name="opt_out" value="1"{% if triage_opt_out %} checked{% endif %}> Keep my posts out of AI triage</label>

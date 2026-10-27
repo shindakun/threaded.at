@@ -1378,6 +1378,8 @@ struct SettingsPage {
     public_votes: bool,
     has_vote_scope: bool,
     triage_opt_out: bool,
+    /// AI triage is running: an API key is set and site rules exist.
+    triage_on: bool,
     did: String,
     notice: Option<String>,
 }
@@ -1408,6 +1410,7 @@ pub async fn settings_page(
             public_votes: a.user.public_votes,
             has_vote_scope,
             triage_opt_out: st.store.triage_opt_out(a.user.id).await?,
+            triage_on: st.triage_on(),
             did: a.user.did.clone(),
             notice: q.notice,
         }

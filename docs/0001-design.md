@@ -548,7 +548,10 @@ timeout, or an invalid response becomes `needs_human`. The model ID is a
 setting.
 
 **Consent.** A user setting, "Keep my posts out of AI triage", sends that
-user's items to the human queue without calling the model.
+user's items to the human queue without calling the model. While triage is
+off (no API key, or no site rules yet), the settings page says so, and that
+triage may become opt-in rather than opt-out; a choice made now still
+counts.
 
 **Accountability.** Each verdict stores the model ID, the rules version, and
 the moderator's final decision. `/moderations/stats` publishes how often
@@ -857,6 +860,8 @@ Not yet in a milestone:
 - Whether to add network stats (events per collection namespace over time).
   hydrant in filter mode sees only Threaded's records, so this needs a
   full-network source.
+- Whether AI triage should be opt-in rather than opt-out (§9.2, consent)
+  before it is turned on for threaded.at.
 - Whether to move triage (§9.2) onto aimod, the standalone triage service
   designed in its own repository, once aimod ships. Triage stays in Threaded
   until then.

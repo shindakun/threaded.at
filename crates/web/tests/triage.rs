@@ -341,3 +341,35 @@ async fn comments_are_triaged_held_and_decided() {
         "{log}"
     );
 }
+
+#[tokio::test]
+async fn settings_say_whether_triage_is_on() {
+    let off = "AI triage is not on yet";
+    let on = "New posts may be read by an AI model";
+
+    // No API key.
+    let w = world().await;
+    let alice = w.user("alice.example", &base(), 100, 0).await;
+    let page = w.get("/settings", &alice).await.body;
+    assert!(page.contains(off) && !page.contains(on), "{page}");
+    assert!(
+        page.contains(r#"name="opt_out""#),
+        "the choice can be made before triage is on"
+    );
+
+    // A key, but no site rules yet: still off.
+    let w = world_with_triage().await;
+    let admin = w.user("admin.example", &base(), 100, 0).await;
+    w.role("admin.example", "admin").await;
+    let alice = w.user("alice.example", &base(), 100, 0).await;
+    assert!(w.get("/settings", &alice).await.body.contains(off));
+
+    w.post(
+        "/admin/rules",
+        &admin,
+        &[("body", "No spam."), ("reason", "First")],
+    )
+    .await;
+    let page = w.get("/settings", &alice).await.body;
+    assert!(page.contains(on) && !page.contains(off), "{page}");
+}
