@@ -798,3 +798,36 @@ async fn story_updates_with_bad_fields_are_refused() {
     let s = t.store.story(&short_id).await.unwrap().unwrap();
     assert_eq!((s.title.as_str(), s.edited_at), ("Title", None));
 }
+
+/// Record fields from the network are bound as values: SQL in a title, text,
+/// tag, or record key is stored as written and runs nothing.
+#[tokio::test]
+async fn sql_in_network_records_is_only_text() {
+    let t = T::new().await;
+    let title = "Robert'); DROP TABLE stories; --";
+    let mut e = story(ALICE, "s1'--", title, "https://e.example/x?q=1';--", true);
+    e.record.as_mut().unwrap()["text"] = json!("\" OR 1=1; DELETE FROM users; --");
+    e.record.as_mut().unwrap()["tags"] = json!(["rust", "x' OR '1'='1"]);
+    let Applied::Indexed { short_id } = t.apply(&e).await else {
+        panic!("indexed")
+    };
+    let s = t.store.story(&short_id).await.unwrap().unwrap();
+    assert_eq!(s.title, title);
+    assert_eq!(s.body, "\" OR 1=1; DELETE FROM users; --");
+    assert_eq!(s.tags, "rust", "the unknown tag is dropped, not run");
+    assert_eq!(
+        s.at_uri.as_deref(),
+        Some("at://did:plc:alice/at.threaded.submission/s1'--")
+    );
+    let c = comment(
+        BOB,
+        "c1",
+        &uri(ALICE, SUB, "s1'--"),
+        None,
+        "'; DROP TABLE comments; --",
+    );
+    assert!(matches!(t.apply(&c).await, Applied::Indexed { .. }));
+    assert_eq!(t.count("SELECT count(*) FROM stories").await, 1);
+    assert_eq!(t.count("SELECT count(*) FROM comments").await, 1);
+    assert_eq!(t.count("SELECT count(*) FROM users").await, 2);
+}

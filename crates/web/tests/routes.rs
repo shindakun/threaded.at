@@ -192,3 +192,44 @@ async fn pages_carry_link_preview_tags() {
     assert_eq!(og(&body, "type"), ["article"]);
     assert_eq!(og(&body, "site_name"), ["Threaded"]);
 }
+
+/// Search terms are bound parameters and FTS phrases, never SQL: input that
+/// would widen the match if it were spliced in matches nothing.
+#[tokio::test]
+async fn hostile_search_input_matches_nothing_and_breaks_nothing() {
+    let (app, _) = app().await;
+    for q in [
+        "'; DROP TABLE stories; --",
+        "\" OR 1=1 --",
+        "borrowing\" OR \"1\"=\"1",
+        "*",
+        "NEAR(a b)",
+        "title:\"x",
+        "a AND",
+        ")",
+        "\"",
+        "\\",
+        "tag:rust' OR '1'='1",
+        "domain:%",
+        "domain:_",
+        "by:x' OR 1=1--",
+        "commenter:\")) OR 1=1--",
+    ] {
+        let uri = format!("/search?q={}", url_encode(q));
+        let (status, body) = get(&app, &uri).await;
+        assert_eq!(status, StatusCode::OK, "{q}");
+        assert!(!body.contains("Borrowing"), "{q} matched the story");
+    }
+    // The story is still there, and plain search still finds it.
+    let (_, body) = get(&app, "/search?q=borrowing").await;
+    assert!(body.contains("Borrowing"));
+}
+
+fn url_encode(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_' | b'.' => (b as char).to_string(),
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
