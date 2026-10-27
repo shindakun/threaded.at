@@ -96,12 +96,12 @@ Run against the built `threaded` binary, as an operator would.
 
 | Check | Status |
 |---|---|
-| A reply written before its parent | Not yet run |
 | Deactivating and reactivating an account | Needs a spare account |
 
 Done by hand so far: a submission and a comment written straight to a repo,
 an edit, a late link change that detached the story and a reattach from the
-Detached tab, deleting the record, Threaded's own story not indexed twice,
+Detached tab, deleting the record, a reply written before its parent (held,
+then applied when a parent with the exact AT-URI arrived), Threaded's own story not indexed twice,
 public votes published and counted once, a fresh database rebuilt by replay,
 tracking on sign-in, and identity on user review.
 
