@@ -1107,7 +1107,7 @@ ul.plain li + li { margin-top: 6px; }
           </div>
         </div>
         <div class="frame">
-          <div class="frame-bar"><span class="fd"></span><span class="fd"></span><span class="fd"></span><span class="url">threaded.at/mod/u/kit.example</span></div>
+          <div class="frame-bar"><span class="fd"></span><span class="fd"></span><span class="fd"></span><span class="url">threaded.at/mod/u/did:plc:k7x2...</span></div>
           <div class="frame-body m-pane">
             <h3>Identity</h3>
             <p><b>kit.example</b> did:plc:k7x2... on morel.us-east.host.bsky.network. Account 3 years old; was kit.bsky.social until March.</p>
@@ -1130,7 +1130,7 @@ ul.plain li + li { margin-top: 6px; }
       <div class="sec-head">
         <p class="eyebrow">Admin view</p>
         <h2>Health, tags, people, settings, rules</h2>
-        <p class="sub">Every change is logged with the old and new value. A rules change must pass an eval run against past moderator decisions.</p>
+        <p class="sub">Every change is logged with the old and new value. Rules versions are kept, and each triage verdict names the version it used.</p>
       </div>
       <div class="frame">
         <div class="frame-bar"><span class="fd"></span><span class="fd"></span><span class="fd"></span><span class="url">threaded.at/admin</span></div>
@@ -1204,7 +1204,7 @@ strikethrough, and task lists.</pre>
       <div class="sec-head">
         <p class="eyebrow">WCAG 2.2 AA</p>
         <h2>Accessible from the first commit</h2>
-        <p class="sub">Every M0 page passes axe-core in light and dark. CI fails on a regression.</p>
+        <p class="sub">Every page passes axe-core in light and dark, signed in and out. CI fails on a regression.</p>
       </div>
       <div class="split">
         <div class="tw">
@@ -1253,7 +1253,7 @@ strikethrough, and task lists.</pre>
         <div class="card"><span class="tag neu">files</span><h3>Blog folder</h3><p>Markdown posts with YAML front matter. Picked up within a second of any change.</p></div>
       </div>
       <div class="grid g4">
-        <div class="card"><span class="tag neu">threaded</span><h3>Binary</h3><p>serve and seed. One executable, run by systemd behind nginx.</p></div>
+        <div class="card"><span class="tag neu">threaded</span><h3>Binary</h3><p>serve, seed, keygen, tag, role, and triage check. One executable, run by systemd behind nginx.</p></div>
         <div class="card"><span class="tag neu">core</span><h3>Logic</h3><p>Ranking, levels, search grammar, link canonicalization, tag rules.</p></div>
         <div class="card"><span class="tag neu">store</span><h3>SQLite</h3><p>sqlx, WAL, FTS5 indexes kept by triggers, forward-only migrations.</p></div>
         <div class="card"><span class="tag neu">web</span><h3>axum</h3><p>askama templates, server-rendered, works without JavaScript. Blog loader.</p></div>
@@ -1286,7 +1286,7 @@ strikethrough, and task lists.</pre>
         <div class="step"><span class="idx">M2</span><div><h3>Writing</h3><p>Submit, comment, reply, upvote, flag, edit, delete. Records to the PDS. Public upvotes. Markdown. Rate limits.</p></div><span class="effort">Built</span></div>
         <div class="step"><span class="idx">M3</span><div><h3>Moderation</h3><p>Moderator queue and reviews, admin pages, actions, log, notes, bans, merges, role badges, suggestions, AI triage.</p></div><span class="effort">Built</span></div>
         <div class="step"><span class="idx">M4</span><div><h3>Indexer</h3><p>hydrant beside Threaded: backfill, ordered stream, edits, deletes, account events, records from other apps, the Detached tab, stream lag on admin.</p></div><span class="effort">Built</span></div>
-        <div class="step now"><span class="idx">M5</span><div><h3>Reader features</h3><p>Inbox, read ribbons, saved, filters, feeds, cross-post, labelers.</p></div><span class="effort">Next</span></div>
+        <div class="step now"><span class="idx">M5</span><div><h3>Reader features</h3><p>Inbox, read ribbons, saved, hidden, tag filters, Atom feeds, Bluesky cross-post, labelers, archive links, comment folding, keyboard navigation.</p></div><span class="effort">Next</span></div>
         <div class="step"><span class="idx">M6</span><div><h3>Atmosphere</h3><p>Project submissions, lexicon search, network stats.</p></div></div>
       </div>
     </div>

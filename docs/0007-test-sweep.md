@@ -82,12 +82,12 @@ Run against the built `threaded` binary, as an operator would.
 
 | Item | Why not now | Where |
 |---|---|---|
-| The PLC directory lookup on user review | Its address is fixed; a test needs it configurable to point at a fake server | M5, with the other identity work |
-| The handle typeahead on `/login` | Calls the Bluesky AppView; needs a configurable address and a fake | M5 |
+| The PLC directory lookup on user review | Its address is fixed; a test needs it configurable to point at a fake server | M5, task 9 in `0008-m5.md` |
+| The handle typeahead on `/login` | Calls the Bluesky AppView; needs a configurable address and a fake | M5, task 9 in `0008-m5.md` |
 | OAuth sign-in, the callback, and token refresh | Needs a real authorization server; covered by signing in by hand | By hand, on every release that touches `crates/auth` |
 | Record writes to a real PDS (`records.rs`, the `Pds` writer) | Tests use the in-memory writer by design (AGENTS.md); a fake PDS would test the fake | By hand: the M4 checks wrote, edited, and deleted real records |
 | The live handle checker (`HandleChecker::Network`) | Resolves real handles over DNS and HTTPS | By hand; its store side is tested |
-| `vote.js` and `login.js` | No browser test runner; adding one is a tooling decision | Open question for M5 |
+| `vote.js` and `login.js` | No browser checks yet | M5: the `make a11y` harness already drives Chrome with puppeteer-core and gains behavior checks (`0008-m5.md`) |
 | The systemd units and `build-hydrant.sh` on Linux | No Linux host in CI | By hand on the droplet; `docs/0002-deploy.md`, section 12 |
 | `serve` start-up wiring in `src/main.rs` | Runs the whole server; exercised every time it starts | By hand; `make a11y` starts it |
 | `triage check` | Calls the Anthropic API | By hand when a key is configured |

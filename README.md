@@ -13,6 +13,7 @@ records in the author's own repo.
 - [docs/0005-m3.md](docs/0005-m3.md): the M3 plan, moderation.
 - [docs/0006-m4.md](docs/0006-m4.md): the M4 plan, the indexer.
 - [docs/0007-test-sweep.md](docs/0007-test-sweep.md): the test sweep before M5, and what it leaves for later.
+- [docs/0008-m5.md](docs/0008-m5.md): the M5 plan, reader features.
 - [lexicons/at/threaded/](lexicons/at/threaded/): the submission, comment, and
   public vote schemas.
 - [HUMANS.md](HUMANS.md): the standard for LLM-assisted contributions.
@@ -37,7 +38,10 @@ Working today:
   new posts, edits, deletes, public votes, handle changes, and deactivated
   accounts. Off unless `THREADED_HYDRANT_SOCKET` is set.
 
-Next: **M5, reader features**. The milestone table is in the design doc,
+Next: **M5, reader features**: an inbox for replies, "new" markers on
+threads, saved and hidden stories, tag filters, Atom feeds, posting to
+Bluesky, and labels from atproto labelers. Its plan is
+[docs/0008-m5.md](docs/0008-m5.md). The milestone table is in the design doc,
 section 16.
 
 ## Quick start
@@ -173,6 +177,7 @@ crates/triage/     AI triage: the model request, verdicts, the worker
 crates/indexer/    reading records from hydrant: the client for its socket API
 crates/web/        axum router, askama templates, CSS
 migrations/        forward-only SQL migrations
+tests/             tests of the threaded command line
 lexicons/          at.threaded.* lexicon schemas
 scripts/a11y/      axe-core page audit
 blog/              blog posts, served from ./blog

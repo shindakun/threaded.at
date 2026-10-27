@@ -821,9 +821,10 @@ Defined in `migrations/0001_init.sql`.
 | `mod_log`, `mod_notes` | Public log, private notes |
 | `stories_fts`, `comments_fts` | FTS5 indexes kept in step by triggers |
 
-Later migrations add `oauth_sessions`, `oauth_states`, `suggestions`,
-`modmail`, `stream_cursor`, `story_revisions`, `triage_queue`, and
-`triage_verdicts`.
+Later migrations add `oauth_sessions` and `oauth_requests` (M1),
+`story_revisions` and `comment_revisions` (M2), `triage_queue`,
+`triage_verdicts`, `rules_versions`, `settings`, and `suggestions` (M3), and
+`stream_cursor`, `pending_records`, and `handle_history` (M4).
 
 ## 16. Milestones
 
@@ -834,7 +835,7 @@ Later migrations add `oauth_sessions`, `oauth_states`, `suggestions`,
 | M2 Writing | Submit, comment, reply, upvote, flag, edit, delete; records to the PDS; public upvotes; profiles; Markdown; rate limits; levels enforced | Built |
 | M3 Moderation | Mod log, moderator queue and item and user review, admin pages, actions, notes, bans, merges, role badges, suggestions, AI triage | Built |
 | M4 Indexer | hydrant beside Threaded, stream consumer with cursor, backfill, edits, deletes, account events, records and votes from other apps, the Detached queue tab, hydrant lag on `/admin` | Built |
-| M5 Reader features | Inbox, read ribbons, saved, hidden, filters, feeds, cross-post, labelers | |
+| M5 Reader features | Inbox, read ribbons, saved, hidden, filters, feeds, cross-post, labelers, archive links, comment folding, keyboard navigation | Next |
 | M6 Atmosphere | Project submissions, lexicon search, network stats | |
 
 Not yet in a milestone:
