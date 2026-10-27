@@ -4,6 +4,11 @@
 {% block main %}
 <h1>{{ name }}</h1>
 <p class="meta">Joined {{ joined }} | karma {{ karma }} | {{ level }}</p>
+{% if let Some(h) = hidden %}{% if !h.is_empty() %}
+<h2>Hidden from others</h2>
+<p class="hint">Only you see this list. Each post says why it is hidden.</p>
+<ul class="plain">{% for p in h %}<li><a href="{{ p.href }}">{{ p.label }}</a> <span class="meta">{{ p.age }}: {{ p.status }}</span></li>{% endfor %}</ul>
+{% endif %}{% endif %}
 <h2>Stories</h2>
 {% if stories.is_empty() %}<p class="empty">No stories.</p>{% else %}
 <ol class="stories">{% for s in stories %}{% include "story_row.html" %}{% endfor %}</ol>

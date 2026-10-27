@@ -302,3 +302,60 @@ async fn user_review_works_with_the_indexer_off() {
     let page = w.get("/mod/u/did:plc:new", &moderator).await.body;
     assert!(page.contains("(1 day)"), "{page}");
 }
+
+#[tokio::test]
+async fn the_author_finds_hidden_posts_on_their_profile() {
+    let (w, author, reader, moderator, id) = setup().await;
+    let r = w
+        .post(
+            "/comment",
+            &author,
+            &[("story", &id), ("text", "Off the rails")],
+        )
+        .await;
+    let c = r
+        .location
+        .unwrap()
+        .rsplit("#c-")
+        .next()
+        .unwrap()
+        .to_string();
+    w.post(
+        &format!("/mod/c/{c}"),
+        &moderator,
+        &[("action", "remove"), ("reason", "Unkind")],
+    )
+    .await;
+    detach(&w, &id, "https://e.example/moved").await;
+
+    let own = w.get("/u/alice.example", &author).await.body;
+    assert!(own.contains("Hidden from others"), "{own}");
+    assert!(
+        own.contains(&format!(r#"<a href="/s/{id}">A story</a>"#)),
+        "{own}"
+    );
+    assert!(own.contains("Hidden for review: the link changed after the edit window"));
+    assert!(own.contains(&format!(
+        r#"<a href="/s/{id}#c-{c}">Comment on A story</a>"#
+    )));
+    assert!(own.contains("Removed by a moderator: Unkind"));
+
+    for who in [&reader, &moderator, ""] {
+        let page = w.get("/u/alice.example", who).await.body;
+        assert!(
+            !page.contains("Hidden from others"),
+            "only the author sees it"
+        );
+    }
+
+    // Reattached, the story leaves the list; the removed comment stays.
+    w.post(
+        &format!("/mod/s/{id}"),
+        &moderator,
+        &[("action", "reattach"), ("reason", "Fine")],
+    )
+    .await;
+    let own = w.get("/u/alice.example", &author).await.body;
+    assert!(!own.contains("the link changed after the edit window"));
+    assert!(own.contains("Removed by a moderator: Unkind"));
+}

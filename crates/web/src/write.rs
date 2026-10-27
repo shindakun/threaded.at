@@ -1536,6 +1536,17 @@ struct ProfilePage {
     stories: Vec<StoryView>,
     comments: Vec<ProfileComment>,
     liked: Option<Vec<StoryView>>,
+    /// The author's own hidden posts; `None` for everyone else.
+    hidden: Option<Vec<HiddenPost>>,
+}
+
+/// A post of the author's that readers cannot see, with the reason, so the
+/// author can find it again from their profile.
+pub struct HiddenPost {
+    pub href: String,
+    pub label: String,
+    pub status: String,
+    pub age: String,
 }
 
 pub async fn profile(
@@ -1571,6 +1582,55 @@ pub async fn profile(
             story_title: c.story_title,
         })
         .collect();
+    let is_me = viewer
+        .me
+        .as_ref()
+        .is_some_and(|m| m.session.did == user.did);
+    let hidden = if is_me {
+        let mut posts: Vec<(i64, HiddenPost)> = Vec::new();
+        for r in st.store.hidden_stories_by_user(user.id, 30).await? {
+            let status = hidden_status(
+                r.removed_reason.as_deref(),
+                r.removed_at.is_some(),
+                r.held_at.is_some(),
+                r.detached_at.is_some(),
+                r.author_inactive,
+            )
+            .unwrap_or_default();
+            posts.push((
+                r.created_at,
+                HiddenPost {
+                    href: format!("/s/{}", r.short_id),
+                    label: r.title,
+                    status,
+                    age: ago(now - r.created_at),
+                },
+            ));
+        }
+        for c in st.store.hidden_comments_by_user(user.id, 30).await? {
+            let status = hidden_status(
+                c.removed_reason.as_deref(),
+                c.removed_at.is_some(),
+                c.held_at.is_some(),
+                false,
+                c.author_inactive,
+            )
+            .unwrap_or_default();
+            posts.push((
+                c.created_at,
+                HiddenPost {
+                    href: format!("/s/{}#c-{}", c.story_short_id, c.short_id),
+                    label: format!("Comment on {}", c.story_title),
+                    status,
+                    age: ago(now - c.created_at),
+                },
+            ));
+        }
+        posts.sort_by_key(|p| std::cmp::Reverse(p.0));
+        Some(posts.into_iter().map(|p| p.1).collect())
+    } else {
+        None
+    };
     let liked = if user.public_votes {
         let mut l: Vec<StoryView> = st
             .store
@@ -1597,6 +1657,7 @@ pub async fn profile(
             stories,
             comments,
             liked,
+            hidden,
         }
         .render()?,
     ))

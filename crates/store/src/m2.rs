@@ -587,6 +587,43 @@ impl Store {
         .await
     }
 
+    /// The user's own stories that readers cannot see: removed, held,
+    /// detached, or by an account the network reports inactive. Deleted and
+    /// merged stories are not listed; a merged one lives on in its target.
+    pub async fn hidden_stories_by_user(&self, user_id: i64, limit: i64) -> Result<Vec<StoryRow>> {
+        sqlx::query_as(&format!(
+            "SELECT {STORY_COLUMNS} FROM stories s JOIN users u ON u.id = s.user_id \
+             WHERE s.user_id = ? AND s.deleted_at IS NULL AND s.merged_into IS NULL \
+             AND (s.removed_at IS NOT NULL OR s.held_at IS NOT NULL OR s.detached_at IS NOT NULL \
+                  OR u.inactive_at IS NOT NULL) \
+             ORDER BY s.created_at DESC LIMIT ?"
+        ))
+        .bind(user_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    /// The user's own comments that readers cannot see: removed, held, or by
+    /// an account the network reports inactive.
+    pub async fn hidden_comments_by_user(
+        &self,
+        user_id: i64,
+        limit: i64,
+    ) -> Result<Vec<CommentRow>> {
+        sqlx::query_as(&format!(
+            "SELECT {COMMENT_COLUMNS} FROM comments c JOIN users u ON u.id = c.user_id \
+             JOIN stories s ON s.id = c.story_id \
+             WHERE c.user_id = ? AND c.deleted_at IS NULL \
+             AND (c.removed_at IS NOT NULL OR c.held_at IS NOT NULL OR u.inactive_at IS NOT NULL) \
+             ORDER BY c.created_at DESC LIMIT ?"
+        ))
+        .bind(user_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+    }
+
     /// Stories a user upvoted, newest vote first.
     pub async fn liked_stories(&self, user_id: i64, limit: i64) -> Result<Vec<StoryRow>> {
         sqlx::query_as(&format!(

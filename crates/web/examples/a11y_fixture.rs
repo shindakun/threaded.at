@@ -134,6 +134,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .await?;
     let removed_id = store.comment(&removed).await?.ok_or("comment missing")?.id;
+    // One of the signed-in user's own posts, removed, so their profile lists
+    // it under "Hidden from others".
+    let mine_removed = store
+        .insert_comment(&NewComment {
+            story_id,
+            user_id: me,
+            parent_id: None,
+            body: "My removed comment.",
+            created_at: now - 250,
+            record: None,
+        })
+        .await?;
+    let mine_removed_id = store
+        .comment(&mine_removed)
+        .await?
+        .ok_or("comment missing")?
+        .id;
+    store
+        .remove(
+            Target::Comment(mine_removed_id),
+            By::Moderator(me),
+            "Off-topic",
+            now,
+        )
+        .await?
+        .map_err(|e| e.to_string())?;
     store
         .remove(
             Target::Comment(removed_id),
