@@ -312,6 +312,23 @@ pub struct LoginForm {
     flow: String,
 }
 
+/// The account as the sign-in confirmation page names it. A DID, as the
+/// settings page sends, shows as the verified handle Threaded holds for it;
+/// sign-in itself still goes by the DID. Anything else shows as entered.
+pub async fn display_account(
+    store: &threaded_store::Store,
+    account: Option<String>,
+) -> Result<Option<String>, threaded_store::Error> {
+    let Some(a) = account else { return Ok(None) };
+    if !a.starts_with("did:") {
+        return Ok(Some(a));
+    }
+    Ok(Some(match store.user_by_did(&a).await? {
+        Some(u) if u.handle_verified => u.handle,
+        _ => a,
+    }))
+}
+
 async fn confirm(
     st: &AppState,
     viewer: Viewer,
@@ -325,9 +342,9 @@ async fn confirm(
             ConfirmPage {
                 site: SITE_NAME,
                 nav: "",
+                account: display_account(&st.store, r.account).await?,
                 viewer,
                 identifier,
-                account: r.account,
                 host: r.auth_host,
                 pds: r.pds_host,
                 next,

@@ -140,3 +140,37 @@ async fn a_handle_that_stops_verifying_shows_the_did_and_is_checked_hourly() {
         .unwrap();
     assert!(due.iter().any(|(_, d)| d == "did:plc:alice"));
 }
+
+#[tokio::test]
+async fn sign_in_confirmation_names_a_did_by_its_verified_handle() {
+    use threaded_web::auth::display_account;
+    let w = world().await;
+    w.user("alice.example", &base(), 10, 0).await;
+    w.store
+        .record_sign_in("did:plc:bob", "bob.example", false, NOW)
+        .await
+        .unwrap();
+    let name = |a: &str| display_account(&w.store, Some(a.to_string()));
+
+    // The settings page signs in by DID; the page shows the verified handle.
+    assert_eq!(
+        name("did:plc:alice").await.unwrap().as_deref(),
+        Some("alice.example")
+    );
+    // An unverified handle is never shown, nor is an unknown DID replaced.
+    assert_eq!(
+        name("did:plc:bob").await.unwrap().as_deref(),
+        Some("did:plc:bob")
+    );
+    assert_eq!(
+        name("did:plc:nobody").await.unwrap().as_deref(),
+        Some("did:plc:nobody")
+    );
+    // A handle the user typed shows as typed.
+    assert_eq!(
+        name("alice.example").await.unwrap().as_deref(),
+        Some("alice.example")
+    );
+    // A server address names no account.
+    assert_eq!(display_account(&w.store, None).await.unwrap(), None);
+}
