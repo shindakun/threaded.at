@@ -8,6 +8,15 @@
 </form>
 {% endmacro %}
 
+{% macro mark(kind, id, on, on_label, off_label, title, csrf, next) %}
+<form method="post" action="/s/{{ id }}/{{ kind }}" class="inline mark" data-on="{{ on_label }}" data-off="{{ off_label }}">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="on" value="{% if on %}0{% else %}1{% endif %}">
+  <input type="hidden" name="next" value="{{ next }}">
+  <button type="submit" class="linkish"><span data-label>{% if on %}{{ on_label }}{% else %}{{ off_label }}{% endif %}</span><span class="vh">: {{ title }}</span></button>
+</form>
+{% endmacro %}
+
 {% macro flag(fv, csrf, next) %}
 {% if !fv.received.is_empty() %}<p class="flagged">Flagged: {% for r in fv.received %}{{ r.0 }} ({{ r.1 }}){% if !loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
 {% if fv.allowed %}

@@ -3,8 +3,9 @@
 {% block title %}{{ heading }} | {{ site }}{% endblock %}
 {% block main %}
 <h1{% if hide_heading %} class="vh"{% endif %}>{{ heading }}</h1>
+{% if !lead.is_empty() %}<p class="lead">{{ lead }}</p>{% endif %}
 {% if stories.is_empty() %}
-<p class="empty">No stories.</p>
+<p class="empty">{{ empty }}</p>
 {% else %}
 <ol class="stories">
 {% for s in stories %}{% include "story_row.html" %}{% endfor %}

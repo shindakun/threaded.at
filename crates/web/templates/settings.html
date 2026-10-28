@@ -22,6 +22,20 @@
   <button type="submit" class="primary">Grant permission</button>
 </form>
 {% endif %}
+<h2>Tag filters</h2>
+<p class="lead">Stories with a filtered tag leave your front page, the other listings, and search. The tag's own page, and a search for <code>tag:</code> that tag, still show them. Only you are affected.</p>
+<form method="post" action="/settings/tags" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <fieldset class="tags-pick">
+    <legend>Hide stories tagged</legend>
+    {% for t in tag_filters %}
+    <label><input type="checkbox" name="tags" value="{{ t.name }}"{% if t.checked %} checked{% endif %}> <span class="tag">{{ t.name }}</span> {{ t.description }}</label>
+    {% endfor %}
+  </fieldset>
+  <button type="submit" class="primary">Save</button>
+</form>
+<h2>Saved and hidden stories</h2>
+<p>Stories you saved are on <a href="/saved">your saved list</a>. Stories you hid are on <a href="/hidden">your hidden list</a>, where you can unhide them.</p>
 <h2>AI triage</h2>
 {% if triage_on %}
 <p class="lead">New posts may be read by an AI model that checks them against the site rules and flags likely spam for a moderator. It never decides alone: a moderator confirms or releases every hold. You can keep your posts out of it; a moderator reviews them instead.</p>

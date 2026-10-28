@@ -178,6 +178,11 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/settings", get(write::settings_page).post(write::settings))
         .route("/u/{handle}", get(write::profile))
+        .route("/saved", get(saved))
+        .route("/hidden", get(hidden))
+        .route("/s/{short_id}/save", axum::routing::post(write::save))
+        .route("/s/{short_id}/hide", axum::routing::post(write::hide))
+        .route("/settings/tags", axum::routing::post(write::settings_tags))
         .route("/search", get(search_page))
         .route("/tags", get(tags))
         .route("/blog", get(blog_index))
@@ -210,6 +215,13 @@ pub struct StoryView {
     pub author_did: String,
     pub voted: bool,
     pub can_vote: bool,
+    /// The signed-in reader saved this story.
+    pub saved: bool,
+    /// The signed-in reader hid this story from their listings.
+    pub hidden: bool,
+    /// The row offers save and hide: false for a story readers cannot see,
+    /// shown to its author or a moderator.
+    pub markable: bool,
     pub short_id: String,
     pub title: String,
     pub href: String,
@@ -232,6 +244,9 @@ impl StoryView {
             badges: Vec::new(),
             voted: false,
             can_vote: false,
+            saved: false,
+            hidden: false,
+            markable: true,
             href: r
                 .url
                 .clone()
@@ -269,6 +284,9 @@ struct ListPage {
     heading: String,
     hide_heading: bool,
     nav: &'static str,
+    /// A line under the heading, for the reader's own lists.
+    lead: &'static str,
+    empty: &'static str,
     stories: Vec<StoryView>,
     page: i64,
     prev: Option<String>,
@@ -466,6 +484,8 @@ struct Spec<'a> {
     heading: String,
     hide_heading: bool,
     nav: &'static str,
+    lead: &'static str,
+    empty: &'static str,
     base: &'a str,
     extra: &'a str,
 }
@@ -478,15 +498,18 @@ impl<'a> Spec<'a> {
             heading: String::new(),
             hide_heading: false,
             nav: "",
+            lead: "",
+            empty: "No stories.",
             base,
             extra: "",
         }
     }
 }
 
-async fn listing(st: &AppState, viewer: Viewer, spec: Spec<'_>, page: Option<i64>) -> Page {
+async fn listing(st: &AppState, viewer: Viewer, mut spec: Spec<'_>, page: Option<i64>) -> Page {
     let page = page.unwrap_or(1).max(1);
     let now = (st.clock)();
+    spec.filter.reader = viewer.me.as_ref().map(|m| m.user_id);
     let rows = st
         .store
         .list(
@@ -517,6 +540,8 @@ async fn listing(st: &AppState, viewer: Viewer, spec: Spec<'_>, page: Option<i64
             hide_heading: spec.hide_heading,
             heading: spec.heading,
             nav: spec.nav,
+            lead: spec.lead,
+            empty: spec.empty,
             stories,
             page,
             prev: (page > 1).then(|| link(page - 1)),
@@ -620,6 +645,38 @@ async fn by_domain(
     listing(&st, viewer, spec, p.page).await
 }
 
+async fn saved(State(st): State<AppState>, viewer: Viewer, Query(p): Query<PageParams>) -> Page {
+    let user_id = signed_in(&viewer, "/saved")?;
+    let spec = Spec {
+        nav: "saved",
+        heading: "Saved stories".into(),
+        lead: "Only you see this list.",
+        empty: "No saved stories. Save one with the \"save\" link under it.",
+        ..Spec::new(Listing::Saved { user_id }, "/saved")
+    };
+    listing(&st, viewer, spec, p.page).await
+}
+
+async fn hidden(State(st): State<AppState>, viewer: Viewer, Query(p): Query<PageParams>) -> Page {
+    let user_id = signed_in(&viewer, "/hidden")?;
+    let spec = Spec {
+        heading: "Hidden stories".into(),
+        lead: "Stories you hid stay out of your listings and search. Unhide one to bring it back.",
+        empty: "No hidden stories.",
+        ..Spec::new(Listing::Hidden { user_id }, "/hidden")
+    };
+    listing(&st, viewer, spec, p.page).await
+}
+
+/// The signed-in reader's user ID, or a redirect to sign in.
+pub(crate) fn signed_in(viewer: &Viewer, next: &str) -> Result<i64, AppError> {
+    viewer
+        .me
+        .as_ref()
+        .map(|m| m.user_id)
+        .ok_or_else(|| AppError::SignIn(next.to_string()))
+}
+
 #[derive(Deserialize)]
 struct SearchParams {
     q: Option<String>,
@@ -635,7 +692,7 @@ async fn search_page(
     let now = (st.clock)();
     let mut stories: Vec<StoryView> = st
         .store
-        .search(&parsed, PAGE_SIZE, 0)
+        .search(&parsed, viewer.me.as_ref().map(|m| m.user_id), PAGE_SIZE, 0)
         .await?
         .into_iter()
         .map(|r| StoryView::from_row(r, now))
@@ -644,7 +701,7 @@ async fn search_page(
     Ok(Html(
         SearchPage {
             site: SITE_NAME,
-            here: "/search".into(),
+            here: viewer.here.clone(),
             viewer,
             nav: "search",
             searched: !parsed.is_empty(),
@@ -717,7 +774,6 @@ async fn blog_post(State(st): State<AppState>, viewer: Viewer, Path(slug): Path<
     ))
 }
 
-/// Marks which stories the viewer upvoted and may vote on.
 /// Active role badges for these users, by user ID.
 pub(crate) async fn badge_map(
     st: &AppState,
@@ -734,7 +790,7 @@ pub(crate) async fn badge_map(
 }
 
 /// Fills in what a story row needs beyond its database row: the authors'
-/// badges, and for a signed-in viewer, their upvotes.
+/// badges, and for a signed-in viewer, their upvotes, saves, and hides.
 pub(crate) async fn prepare_rows(
     st: &AppState,
     viewer: &Viewer,
@@ -749,9 +805,12 @@ pub(crate) async fn prepare_rows(
     let Some(me) = &viewer.me else { return Ok(()) };
     let ids: Vec<i64> = stories.iter().map(|s| s.id).collect();
     let voted = st.store.upvoted_stories(me.user_id, &ids).await?;
+    let marks = st.store.marks(me.user_id, &ids).await?;
     for s in stories.iter_mut() {
         s.can_vote = s.author_did != me.session.did;
         s.voted = voted.contains(&s.id);
+        s.saved = marks.saved.contains(&s.id);
+        s.hidden = marks.hidden.contains(&s.id);
     }
     Ok(())
 }

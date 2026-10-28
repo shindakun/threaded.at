@@ -34,6 +34,7 @@
   <div class="account">
     {% if let Some(name) = viewer.name %}
     <a class="who" href="/u/{{ name }}">{{ name }}</a>
+    <a href="/saved"{% if nav == "saved" %} aria-current="page"{% endif %}>saved</a>
     <a href="/settings">settings</a>
     <form method="post" action="/logout">
       <input type="hidden" name="csrf" value="{{ viewer.csrf }}">

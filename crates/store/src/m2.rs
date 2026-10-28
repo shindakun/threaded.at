@@ -562,15 +562,25 @@ impl Store {
         Ok(())
     }
 
-    pub async fn stories_by_user(&self, user_id: i64, limit: i64) -> Result<Vec<StoryRow>> {
-        sqlx::query_as(&format!(
+    /// A user's visible stories, newest first, without those `reader` hid
+    /// or filtered out.
+    pub async fn stories_by_user(
+        &self,
+        user_id: i64,
+        reader: Option<i64>,
+        limit: i64,
+    ) -> Result<Vec<StoryRow>> {
+        let mut qb = sqlx::QueryBuilder::<Sqlite>::new(format!(
             "SELECT {STORY_COLUMNS} FROM stories s JOIN users u ON u.id = s.user_id \
-             WHERE s.user_id = ? AND {VISIBLE} ORDER BY s.created_at DESC LIMIT ?"
-        ))
-        .bind(user_id)
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await
+             WHERE {VISIBLE} AND s.user_id = "
+        ));
+        qb.push_bind(user_id);
+        if let Some(r) = reader {
+            crate::reader::push_reader(&mut qb, r, &[]);
+        }
+        qb.push(" ORDER BY s.created_at DESC LIMIT ")
+            .push_bind(limit);
+        qb.build_query_as().fetch_all(&self.pool).await
     }
 
     pub async fn comments_by_user(&self, user_id: i64, limit: i64) -> Result<Vec<CommentRow>> {
@@ -624,17 +634,26 @@ impl Store {
         .await
     }
 
-    /// Stories a user upvoted, newest vote first.
-    pub async fn liked_stories(&self, user_id: i64, limit: i64) -> Result<Vec<StoryRow>> {
-        sqlx::query_as(&format!(
+    /// Stories a user upvoted, newest vote first, without those `reader`
+    /// hid or filtered out.
+    pub async fn liked_stories(
+        &self,
+        user_id: i64,
+        reader: Option<i64>,
+        limit: i64,
+    ) -> Result<Vec<StoryRow>> {
+        let mut qb = sqlx::QueryBuilder::<Sqlite>::new(format!(
             "SELECT {STORY_COLUMNS} FROM votes v JOIN stories s ON s.id = v.story_id \
              JOIN users u ON u.id = s.user_id \
-             WHERE v.user_id = ? AND v.value = 1 AND {VISIBLE} ORDER BY v.created_at DESC LIMIT ?"
-        ))
-        .bind(user_id)
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await
+             WHERE v.value = 1 AND {VISIBLE} AND v.user_id = "
+        ));
+        qb.push_bind(user_id);
+        if let Some(r) = reader {
+            crate::reader::push_reader(&mut qb, r, &[]);
+        }
+        qb.push(" ORDER BY v.created_at DESC LIMIT ")
+            .push_bind(limit);
+        qb.build_query_as().fetch_all(&self.pool).await
     }
 
     /// Flag reasons on an item with their counts, for its author.

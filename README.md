@@ -151,7 +151,8 @@ section 12. A file that fails to parse is skipped and the reason is logged.
 | `/submit` | Submit a story |
 | `/comment`, `/vote`, `/flag` | Form targets for comments, upvotes, and flags |
 | `/u/{handle}` | A user's stories, comments, and public upvotes; a DID works too |
-| `/settings` | Public upvotes; keeping your posts out of AI triage (form target `/settings/triage`) |
+| `/settings` | Public upvotes, tag filters, and keeping your posts out of AI triage (form targets `/settings/tags`, `/settings/triage`) |
+| `/saved`, `/hidden` | Your saved stories and the stories you hid; form targets `/s/{short_id}/save` and `/s/{short_id}/hide` |
 | `/s/{short_id}/suggest` | Suggest a story's title and tags |
 | `/mod` | Moderation queue: Holds, Flagged, Suggestions, Edits, Detached; form targets `/mod/verdicts/{id}` and `/mod/suggestions/{id}` |
 | `/mod/s/{short_id}`, `/mod/c/{short_id}`, `/mod/u/{did}` | Review a story, comment, or user, and act on it; a handle in `/mod/u/` redirects to the DID |

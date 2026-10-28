@@ -452,7 +452,9 @@ async fn an_inactive_accounts_posts_hide_until_it_returns() {
     ))
     .await
     .unwrap();
-    let short = s.stories_by_user(1, 1).await.unwrap()[0].short_id.clone();
+    let short = s.stories_by_user(1, None, 1).await.unwrap()[0]
+        .short_id
+        .clone();
 
     ix.handle(&account(3, "did:plc:alice", false, Some("deactivated")))
         .await

@@ -291,6 +291,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .bind(me)
         .execute(store.pool())
         .await?;
+    // Something on /saved and /hidden, so the audit sees rows, not the
+    // empty state: the other account's story saved, a seeded story hidden.
+    let theirs_row = store.story(&theirs).await?.ok_or("story missing")?;
+    store.set_saved(me, theirs_row.id, true, now).await?;
+    let seeded: i64 = sqlx::query_scalar(
+        "SELECT id FROM stories WHERE user_id NOT IN (?, ?) ORDER BY id LIMIT 1",
+    )
+    .bind(me)
+    .bind(other)
+    .fetch_one(store.pool())
+    .await?;
+    store.set_hidden(me, seeded, true, now).await?;
 
     let key = cookie::Key::from(&std::fs::read(&key_file)?);
     let mut jar = cookie::CookieJar::new();

@@ -635,6 +635,10 @@ async fn every_write_needs_the_csrf_token() {
         "/vote".into(),
         "/flag".into(),
         "/settings".into(),
+        "/settings/triage".into(),
+        "/settings/tags".into(),
+        format!("/s/{id}/save"),
+        format!("/s/{id}/hide"),
         format!("/s/{id}/edit"),
         format!("/s/{id}/delete"),
         format!("/c/{c}/edit"),
@@ -646,7 +650,7 @@ async fn every_write_needs_the_csrf_token() {
                     .header(header::COOKIE, &alice)
                     .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
                     .body(Body::from(format!(
-                        "csrf=wrong&story={id}&kind=story&id={id}&title=T&text=T&tags=rust"
+                        "csrf=wrong&story={id}&kind=story&id={id}&title=T&text=T&tags=rust&on=1&opt_out=1"
                     )))
                     .unwrap(),
             )
@@ -654,6 +658,14 @@ async fn every_write_needs_the_csrf_token() {
         assert_eq!(r.status, StatusCode::FORBIDDEN, "{uri}");
     }
     assert_eq!(w.writes().len(), before, "a refused form writes nothing");
+    let marks: i64 = sqlx::query_scalar(
+        "SELECT (SELECT count(*) FROM saved_stories) + (SELECT count(*) FROM hidden_stories) \
+         + (SELECT count(*) FROM tag_filters) + (SELECT count(*) FROM users WHERE triage_opt_out)",
+    )
+    .fetch_one(w.store.pool())
+    .await
+    .unwrap();
+    assert_eq!(marks, 0, "a refused form changes nothing");
 }
 
 #[tokio::test]

@@ -272,7 +272,7 @@ async fn refusals() {
 }
 
 async fn first_id(s: &Store, user_id: i64) -> String {
-    s.stories_by_user(user_id, 1).await.unwrap()[0]
+    s.stories_by_user(user_id, None, 1).await.unwrap()[0]
         .short_id
         .clone()
 }

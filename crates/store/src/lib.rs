@@ -11,12 +11,14 @@ mod handles;
 mod m2;
 mod moderation;
 mod network;
+mod reader;
 mod triage;
 pub use accept::*;
 pub use handles::*;
 pub use m2::*;
 pub use moderation::*;
 pub use network::*;
+pub use reader::*;
 pub use triage::*;
 
 pub use sqlx::Error;
@@ -37,6 +39,14 @@ pub enum Listing {
     Top {
         since: i64,
     },
+    /// Stories a reader saved, newest save first.
+    Saved {
+        user_id: i64,
+    },
+    /// Stories a reader hid, newest first, so they can bring them back.
+    Hidden {
+        user_id: i64,
+    },
 }
 
 #[derive(Debug, Clone, Default)]
@@ -44,6 +54,9 @@ pub struct Filter {
     pub tag: Option<String>,
     pub domain: Option<String>,
     pub submitter: Option<String>,
+    /// The signed-in reader. Their hidden stories and filtered tags leave
+    /// the public listings; a filter on `tag` itself does not apply.
+    pub reader: Option<i64>,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -264,6 +277,11 @@ impl Store {
         if let Some(h) = &f.submitter {
             push_user(&mut qb, "u", h);
         }
+        let public = !matches!(listing, Listing::Saved { .. } | Listing::Hidden { .. });
+        if let (true, Some(reader)) = (public, f.reader) {
+            let shown: Vec<String> = f.tag.iter().cloned().collect();
+            reader::push_reader(&mut qb, reader, &shown);
+        }
         match listing {
             Listing::Front => qb.push(" ORDER BY s.rank DESC"),
             Listing::New => qb.push(" ORDER BY s.created_at DESC"),
@@ -274,6 +292,8 @@ impl Store {
                 .push(" AND s.created_at >= ")
                 .push_bind(since)
                 .push(" ORDER BY s.score DESC, s.created_at DESC"),
+            Listing::Saved { user_id } => push_marked(&mut qb, "saved_stories", user_id),
+            Listing::Hidden { user_id } => push_marked(&mut qb, "hidden_stories", user_id),
         };
         qb.push(" LIMIT ")
             .push_bind(limit)
@@ -282,7 +302,15 @@ impl Store {
         qb.build_query_as().fetch_all(&self.pool).await
     }
 
-    pub async fn search(&self, q: &Query, limit: i64, offset: i64) -> Result<Vec<StoryRow>> {
+    /// Searches visible stories. A `reader`'s hidden stories and filtered
+    /// tags are left out, except tags the query asks for with `tag:`.
+    pub async fn search(
+        &self,
+        q: &Query,
+        reader: Option<i64>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<StoryRow>> {
         if q.is_empty() {
             return Ok(Vec::new());
         }
@@ -318,6 +346,9 @@ impl Store {
             push_user(&mut qb, "cu", h);
             qb.push(")");
         }
+        if let Some(reader) = reader {
+            reader::push_reader(&mut qb, reader, &q.tags);
+        }
         match (q.sort, fts.is_some()) {
             (Sort::Relevance, true) => qb.push(" ORDER BY bm25(stories_fts, 10.0, 1.0, 2.0, 2.0)"),
             (Sort::Score, _) => qb.push(" ORDER BY s.score DESC, s.created_at DESC"),
@@ -341,6 +372,24 @@ fn push_user(qb: &mut QueryBuilder<'_, Sqlite>, alias: &str, who: &str) {
         ))
         .push_bind(who.to_string())
         .push("))");
+}
+
+/// Stories in a reader's saved or hidden list, newest mark first.
+/// `table` is one of the two constants named in `Store::list`.
+fn push_marked<'a, 'q>(
+    qb: &'a mut QueryBuilder<'q, Sqlite>,
+    table: &'static str,
+    user_id: i64,
+) -> &'a mut QueryBuilder<'q, Sqlite> {
+    qb.push(format!(
+        " AND EXISTS (SELECT 1 FROM {table} x WHERE x.story_id = s.id AND x.user_id = "
+    ))
+    .push_bind(user_id)
+    .push(format!(
+        ") ORDER BY (SELECT x.created_at FROM {table} x WHERE x.story_id = s.id AND x.user_id = "
+    ))
+    .push_bind(user_id)
+    .push(") DESC, s.id DESC")
 }
 
 fn push_has_tag(qb: &mut QueryBuilder<'_, Sqlite>, tag: &str, has: bool) {

@@ -142,6 +142,9 @@ pub struct Viewer {
     pub name: Option<String>,
     pub csrf: String,
     pub me: Option<Me>,
+    /// This page's path and query without transient parameters, for forms
+    /// that come back here.
+    pub here: String,
     /// This page's absolute, shareable URL, for `og:url`.
     pub url: String,
 }
@@ -179,14 +182,13 @@ impl FromRequestParts<AppState> for Viewer {
             .map(|t| t.0.clone())
             .unwrap_or_default();
         let jar = PrivateCookieJar::from_headers(&parts.headers, st.auth.key.clone());
+        let here = crate::origin::shareable(parts.uri.path(), parts.uri.query());
         let mut viewer = Viewer {
             name: None,
             csrf,
             me: None,
-            url: st.origin.url(&crate::origin::shareable(
-                parts.uri.path(),
-                parts.uri.query(),
-            )),
+            url: st.origin.url(&here),
+            here,
         };
         if let Some(session) = session_of(&jar, &st.auth) {
             let live = st

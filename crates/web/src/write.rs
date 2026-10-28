@@ -420,6 +420,7 @@ pub async fn story_page(
     if locked || row.hidden() {
         s.can_vote = false;
     }
+    s.markable = !row.hidden();
     Ok(Html(
         StoryPage {
             site: SITE_NAME,
@@ -1411,6 +1412,8 @@ struct SettingsPage {
     triage_on: bool,
     did: String,
     notice: Option<String>,
+    /// Every active tag, checked when the reader filters it out.
+    tag_filters: Vec<TagChoice>,
 }
 
 #[derive(Deserialize, Default)]
@@ -1431,6 +1434,8 @@ pub async fn settings_page(
 ) -> Page {
     let a = actor(&st, &viewer, "/settings").await?;
     let has_vote_scope = has_vote_scope(&st, &a.me.session).await;
+    let filtered = st.store.tag_filters(a.user.id).await?;
+    let tag_filters = all_tag_choices(&st, &filtered).await?;
     Ok(Html(
         SettingsPage {
             site: SITE_NAME,
@@ -1442,6 +1447,7 @@ pub async fn settings_page(
             triage_on: st.triage_on(),
             did: a.user.did.clone(),
             notice: q.notice,
+            tag_filters,
         }
         .render()?,
     ))
@@ -1544,6 +1550,113 @@ pub async fn settings(
     Ok(Redirect::to(&format!("/settings?notice={notice}")).into_response())
 }
 
+// ---------- saved, hidden, and filtered ----------
+
+#[derive(Deserialize)]
+pub struct MarkForm {
+    csrf: String,
+    /// `1` to save or hide, `0` to undo it.
+    #[serde(default)]
+    on: String,
+    #[serde(default)]
+    next: String,
+}
+
+#[derive(Clone, Copy)]
+enum Mark {
+    Save,
+    Hide,
+}
+
+pub async fn save(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    headers: HeaderMap,
+    Path(short_id): Path<String>,
+    Form(f): Form<MarkForm>,
+) -> Result<Response, AppError> {
+    mark(&st, &viewer, &headers, &short_id, f, Mark::Save).await
+}
+
+pub async fn hide(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    headers: HeaderMap,
+    Path(short_id): Path<String>,
+    Form(f): Form<MarkForm>,
+) -> Result<Response, AppError> {
+    mark(&st, &viewer, &headers, &short_id, f, Mark::Hide).await
+}
+
+/// Saves or hides a story for the signed-in reader, or undoes it. Only a
+/// story readers can see takes a new mark; a mark on one that has since
+/// been removed can still be taken away.
+async fn mark(
+    st: &AppState,
+    viewer: &Viewer,
+    headers: &HeaderMap,
+    short_id: &str,
+    f: MarkForm,
+    kind: Mark,
+) -> Result<Response, AppError> {
+    check_csrf(viewer, &f.csrf)?;
+    let back = if f.next.is_empty() {
+        format!("/s/{short_id}")
+    } else {
+        crate::auth::safe_next(&f.next)
+    };
+    let user_id = crate::signed_in(viewer, &back)?;
+    let on = match f.on.as_str() {
+        "1" => true,
+        "0" => false,
+        _ => {
+            return Err(AppError::Refused(
+                "That form is missing a field. Reload the page and try again.".into(),
+            ))
+        }
+    };
+    let story = if on {
+        st.store.story(short_id).await?
+    } else {
+        st.store.story_any(short_id).await?
+    }
+    .ok_or(AppError::NotFound)?;
+    let now = (st.clock)();
+    match kind {
+        Mark::Save => st.store.set_saved(user_id, story.id, on, now).await?,
+        Mark::Hide => st.store.set_hidden(user_id, story.id, on, now).await?,
+    }
+    if wants_json(headers) {
+        return Ok(Json(serde_json::json!({ "on": on })).into_response());
+    }
+    Ok(Redirect::to(&back).into_response())
+}
+
+#[derive(Deserialize)]
+pub struct TagFilterForm {
+    csrf: String,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+/// Replaces the reader's tag filters with the checked tags.
+pub async fn settings_tags(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    HtmlForm(f): HtmlForm<TagFilterForm>,
+) -> Result<Response, AppError> {
+    check_csrf(&viewer, &f.csrf)?;
+    let user_id = crate::signed_in(&viewer, "/settings")?;
+    let known: Vec<String> = st.store.tags().await?.into_iter().map(|t| t.0).collect();
+    if let Some(bad) = f.tags.iter().find(|t| !known.contains(t)) {
+        return Err(AppError::Refused(format!(
+            "There is no tag named \"{bad}\". Reload the settings page and try again."
+        )));
+    }
+    st.store.set_tag_filters(user_id, &f.tags).await?;
+    Ok(Redirect::to("/settings?notice=saved").into_response())
+}
+
 // ---------- profiles ----------
 
 pub struct ProfileComment {
@@ -1595,7 +1708,7 @@ pub async fn profile(
     let level = level::level(&user.account(now), &st.policy().thresholds);
     let mut stories: Vec<StoryView> = st
         .store
-        .stories_by_user(user.id, 30)
+        .stories_by_user(user.id, viewer.me.as_ref().map(|m| m.user_id), 30)
         .await?
         .into_iter()
         .map(|r| StoryView::from_row(r, now))
@@ -1666,7 +1779,7 @@ pub async fn profile(
     let liked = if user.public_votes {
         let mut l: Vec<StoryView> = st
             .store
-            .liked_stories(user.id, 30)
+            .liked_stories(user.id, viewer.me.as_ref().map(|m| m.user_id), 30)
             .await?
             .into_iter()
             .map(|r| StoryView::from_row(r, now))

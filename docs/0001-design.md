@@ -680,7 +680,8 @@ in the mod log; settings changes record the old and new value.
 | Read ribbons | "3 new" on stories with comments since your last visit |
 | Liked | Public upvotes on the profile, for users who opt in (§3.2) |
 | Saved stories | Private list |
-| Hidden stories | Removed from your listings |
+| Hidden stories | Removed from your listings, profiles, and search |
+| Tag filters | A filtered tag's stories leave your listings, except the tag's own page and a search for `tag:` that tag |
 | Feeds | Atom for the front page, newest, each tag, each domain, each user, and the blog |
 | Bluesky cross-post | Opt-in per story; posts the title and story link to Bluesky |
 | Archive links | `archive.org` and `archive.today` links on every link story |
