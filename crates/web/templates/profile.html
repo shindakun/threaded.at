@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% import "macros.html" as m %}
 {% block title %}{{ name }} | {{ site }}{% endblock %}
+{% block head %}{% if let Some(f) = feed %}<link rel="alternate" type="application/atom+xml" title="{{ f.title }}" href="{{ f.path }}">{% endif %}{% endblock %}
 {% block main %}
 <h1>{{ name }}</h1>
 <p class="meta">Joined {{ joined }} | karma {{ karma }} | {{ level }}</p>
@@ -13,6 +14,7 @@
 {% if stories.is_empty() %}<p class="empty">No stories.</p>{% else %}
 <ol class="stories">{% for s in stories %}{% include "story_row.html" %}{% endfor %}</ol>
 {% endif %}
+{% if let Some(f) = feed %}<p class="meta"><a href="{{ f.path }}" type="application/atom+xml">Atom feed</a></p>{% endif %}
 <h2>Comments</h2>
 {% if comments.is_empty() %}<p class="empty">No comments.</p>{% else %}
 <ol class="profile-comments">

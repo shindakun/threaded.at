@@ -698,6 +698,7 @@ with no restart.
 |---|---|
 | `/blog` | Published posts, newest first, 10 per page; `?page=2` and on |
 | `/blog/{slug}` | One post |
+| `/blog/feed` | Atom feed of the newest 30 posts |
 
 A post is YAML front matter between `---` lines, then the body:
 
@@ -715,7 +716,7 @@ Body in CommonMark, with tables, strikethrough, and task lists.
 |---|---|---|
 | `title` | yes | Not empty |
 | `date` | yes | `YYYY-MM-DD`, a real calendar date. Sets the index order. |
-| `slug` | no | Lowercase letters, digits, and hyphens. Defaults to the file name without `.md`. |
+| `slug` | no | Lowercase letters, digits, and hyphens, and not `feed`. Defaults to the file name without `.md`. |
 | `summary` | no | Shown on the index |
 | `author` | no | Shown under the title |
 | `draft` | no | `true` keeps the post off the site |

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% import "macros.html" as m %}
 {% block title %}{{ heading }} | {{ site }}{% endblock %}
+{% block head %}{% if let Some(f) = feed %}<link rel="alternate" type="application/atom+xml" title="{{ f.title }}" href="{{ f.path }}">{% endif %}{% endblock %}
 {% block main %}
 <h1{% if hide_heading %} class="vh"{% endif %}>{{ heading }}</h1>
 {% if !lead.is_empty() %}<p class="lead">{{ lead }}</p>{% endif %}
@@ -17,4 +18,5 @@
   {% if let Some(n) = next %}<a href="{{ n }}" rel="next">Next: page {{ page + 1 }}</a>{% endif %}
 </nav>
 {% endif %}
+{% if let Some(f) = feed %}<p class="meta"><a href="{{ f.path }}" type="application/atom+xml">Atom feed</a></p>{% endif %}
 {% endblock %}

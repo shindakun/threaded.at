@@ -19,7 +19,7 @@ threaded-auth = { version = "0.1.0", path = "../auth" }
 threaded-core = { version = "0.1.0", path = "../core" }
 threaded-indexer = { version = "0.1.0", path = "../indexer" }
 threaded-store = { version = "0.1.0", path = "../store" }
-time = { version = "0.3", features = ["parsing"] }
+time = { version = "0.3", features = ["formatting", "parsing"] }
 tokio = { version = "1", features = ["time"] }
 tower-http = { version = "0.6", features = ["catch-panic"] }
 tracing = "0.1.44"
@@ -27,6 +27,7 @@ tracing = "0.1.44"
 [dev-dependencies]
 cookie = { version = "0.18", features = ["private"] }
 http-body-util = "0.1.5"
+roxmltree = "0.21.2"
 serde_json = "1.0.154"
 serde_urlencoded = "0.7.1"
 sqlx = { version = "0.8.6", default-features = false, features = ["sqlite", "runtime-tokio"] }

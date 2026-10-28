@@ -6,6 +6,7 @@
 <meta property="og:title" content="{{ post.title }}">
 {% if let Some(d) = post.summary %}<meta property="og:description" content="{{ d }}">{% endif %}
 {% endblock %}
+{% block head %}<link rel="alternate" type="application/atom+xml" title="{{ site }} blog" href="/blog/feed">{% endblock %}
 {% block main %}
 <article class="post">
   <h1>{{ post.title }}</h1>

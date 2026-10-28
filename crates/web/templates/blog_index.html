@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Blog{% if page > 1 %}, page {{ page }}{% endif %} | {{ site }}{% endblock %}
+{% block head %}<link rel="alternate" type="application/atom+xml" title="{{ site }} blog" href="/blog/feed">{% endblock %}
 {% block main %}
 <h1>Blog</h1>
 {% if posts.is_empty() %}
@@ -23,4 +24,5 @@
   {% if let Some(n) = next %}<a href="{{ n }}" rel="next">Older posts: page {{ page + 1 }}</a>{% endif %}
 </nav>
 {% endif %}
+<p class="meta"><a href="/blog/feed" type="application/atom+xml">Atom feed</a></p>
 {% endblock %}

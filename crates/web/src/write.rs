@@ -1687,6 +1687,7 @@ struct ProfilePage {
     liked: Option<Vec<StoryView>>,
     /// The author's own hidden posts; `None` for everyone else.
     hidden: Option<Vec<HiddenPost>>,
+    feed: Option<crate::feed::FeedLink>,
 }
 
 /// A post of the author's that readers cannot see, with the reason, so the
@@ -1807,6 +1808,10 @@ pub async fn profile(
             comments,
             liked,
             hidden,
+            feed: Some(crate::feed::FeedLink::new(
+                format!("/u/{}/feed", user.did),
+                format!("{SITE_NAME}: stories by {}", user.name()),
+            )),
         }
         .render()?,
     ))

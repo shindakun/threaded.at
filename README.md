@@ -133,7 +133,7 @@ Body in CommonMark.
 ```
 
 `title` and `date` (`YYYY-MM-DD`) are required. `slug` defaults to the file
-name, and `draft: true` hides a post. The full rules are in the design doc,
+name and cannot be `feed`, and `draft: true` hides a post. The full rules are in the design doc,
 section 12. A file that fails to parse is skipped and the reason is logged.
 
 ## Routes
@@ -166,6 +166,7 @@ section 12. A file that fails to parse is skipped and the reason is logged.
 | `/blog/{slug}` | A blog post |
 | `/login` | Sign in with an atproto account |
 | `/oauth-client-metadata.json`, `/oauth/jwks.json` | OAuth client metadata and public key |
+| `/feed`, `/newest/feed`, `/t/{tag}/feed`, `/domain/{domain}/feed`, `/u/{did}/feed`, `/blog/feed` | Atom feeds, 30 entries each; a handle in `/u/` redirects to the DID |
 | `/healthz` | Liveness |
 
 ## Layout

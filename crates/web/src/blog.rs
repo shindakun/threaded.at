@@ -27,6 +27,8 @@ pub enum ParseError {
     Yaml(String),
     BadDate(String),
     BadSlug(String),
+    /// A slug a route under `/blog/` already uses.
+    ReservedSlug(String),
     EmptyTitle,
 }
 
@@ -42,6 +44,10 @@ impl std::fmt::Display for ParseError {
             ParseError::BadSlug(s) => write!(
                 f,
                 "slug {s:?} must be lowercase letters, digits, and hyphens"
+            ),
+            ParseError::ReservedSlug(s) => write!(
+                f,
+                "slug {s:?} is taken by /blog/{s}; set another with slug: in the front matter"
             ),
             ParseError::EmptyTitle => write!(f, "title is empty"),
         }
@@ -95,6 +101,9 @@ fn display_date(date: &str) -> Option<String> {
     }
     Some(format!("{d} {} {y}", MONTHS[m - 1]))
 }
+
+/// Paths under `/blog/` that are not posts.
+const RESERVED_SLUGS: &[&str] = &["feed"];
 
 fn valid_slug(s: &str) -> bool {
     !s.is_empty()
@@ -164,6 +173,9 @@ pub fn parse(file_stem: &str, src: &str) -> Result<Post, ParseError> {
     let slug = fm.slug.unwrap_or_else(|| file_stem.to_string());
     if !valid_slug(&slug) {
         return Err(ParseError::BadSlug(slug));
+    }
+    if RESERVED_SLUGS.contains(&slug.as_str()) {
+        return Err(ParseError::ReservedSlug(slug));
     }
     Ok(Post {
         slug,
@@ -381,6 +393,15 @@ mod tests {
             );
         }
         assert!(parse("x", "---\ntitle: T\ndate: 2028-02-29\n---\n").is_ok());
+        assert_eq!(
+            parse("feed", "---\ntitle: T\ndate: 2026-10-25\n---\n"),
+            Err(ParseError::ReservedSlug("feed".into()))
+        );
+        assert!(parse(
+            "feed",
+            "---\ntitle: T\ndate: 2026-10-25\nslug: feeds\n---\n"
+        )
+        .is_ok());
         for s in ["Has-Caps", "-lead", "trail-", "a b", "../up", ""] {
             let src = format!("---\ntitle: T\ndate: 2026-10-25\nslug: \"{s}\"\n---\n");
             assert!(

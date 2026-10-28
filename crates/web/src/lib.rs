@@ -2,6 +2,7 @@ use std::collections::HashMap;
 pub mod admin;
 pub mod auth;
 pub mod blog;
+pub mod feed;
 pub mod handles;
 pub mod identity;
 pub mod inbox;
@@ -208,6 +209,15 @@ pub fn router(state: AppState) -> Router {
             state.clone(),
             auth::cookie_layer,
         ))
+        // Feeds come after the cookie layer so their responses set no
+        // cookie: feed readers keep none, and a cookie would stop caches
+        // from sharing one copy.
+        .route("/feed", get(feed::front))
+        .route("/newest/feed", get(feed::newest))
+        .route("/t/{tag}/feed", get(feed::tag))
+        .route("/domain/{domain}/feed", get(feed::domain))
+        .route("/u/{handle}/feed", get(feed::user))
+        .route("/blog/feed", get(feed::blog))
         .layer(tower_http::catch_panic::CatchPanicLayer::new())
         .with_state(state)
 }
@@ -293,6 +303,7 @@ struct ListPage {
     /// A line under the heading, for the reader's own lists.
     lead: &'static str,
     empty: &'static str,
+    feed: Option<feed::FeedLink>,
     stories: Vec<StoryView>,
     page: i64,
     prev: Option<String>,
@@ -492,6 +503,7 @@ struct Spec<'a> {
     nav: &'static str,
     lead: &'static str,
     empty: &'static str,
+    feed: Option<feed::FeedLink>,
     base: &'a str,
     extra: &'a str,
 }
@@ -506,6 +518,7 @@ impl<'a> Spec<'a> {
             nav: "",
             lead: "",
             empty: "No stories.",
+            feed: None,
             base,
             extra: "",
         }
@@ -548,6 +561,7 @@ async fn listing(st: &AppState, viewer: Viewer, mut spec: Spec<'_>, page: Option
             nav: spec.nav,
             lead: spec.lead,
             empty: spec.empty,
+            feed: spec.feed,
             stories,
             page,
             prev: (page > 1).then(|| link(page - 1)),
@@ -562,6 +576,10 @@ async fn front(State(st): State<AppState>, viewer: Viewer, Query(p): Query<PageP
         nav: "front",
         heading: "Front page".into(),
         hide_heading: true,
+        feed: Some(feed::FeedLink::new(
+            "/feed",
+            format!("{SITE_NAME}: front page"),
+        )),
         ..Spec::new(Listing::Front, "/")
     };
     listing(&st, viewer, spec, p.page).await
@@ -571,6 +589,10 @@ async fn newest(State(st): State<AppState>, viewer: Viewer, Query(p): Query<Page
     let spec = Spec {
         nav: "newest",
         heading: "Newest".into(),
+        feed: Some(feed::FeedLink::new(
+            "/newest/feed",
+            format!("{SITE_NAME}: newest stories"),
+        )),
         ..Spec::new(Listing::New, "/newest")
     };
     listing(&st, viewer, spec, p.page).await
@@ -616,6 +638,10 @@ async fn by_tag(
     let base = format!("/t/{tag}");
     let spec = Spec {
         heading: format!("Tagged {tag}"),
+        feed: Some(feed::FeedLink::new(
+            format!("{base}/feed"),
+            format!("{SITE_NAME}: stories tagged {tag}"),
+        )),
         filter: Filter {
             tag: Some(tag),
             ..Default::default()
@@ -631,17 +657,14 @@ async fn by_domain(
     Path(domain): Path<String>,
     Query(p): Query<PageParams>,
 ) -> Page {
-    let domain = domain.to_ascii_lowercase();
-    if domain.is_empty()
-        || !domain
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b"-.".contains(&b))
-    {
-        return Err(AppError::NotFound);
-    }
+    let domain = domain_name(&domain).ok_or(AppError::NotFound)?;
     let base = format!("/domain/{domain}");
     let spec = Spec {
         heading: format!("Stories from {domain}"),
+        feed: Some(feed::FeedLink::new(
+            format!("{base}/feed"),
+            format!("{SITE_NAME}: stories from {domain}"),
+        )),
         filter: Filter {
             domain: Some(domain),
             ..Default::default()
@@ -672,6 +695,17 @@ async fn hidden(State(st): State<AppState>, viewer: Viewer, Query(p): Query<Page
         ..Spec::new(Listing::Hidden { user_id }, "/hidden")
     };
     listing(&st, viewer, spec, p.page).await
+}
+
+/// A domain from a `/domain/{domain}` path, lowercased, or `None` when it
+/// cannot be one.
+pub(crate) fn domain_name(s: &str) -> Option<String> {
+    let domain = s.to_ascii_lowercase();
+    (!domain.is_empty()
+        && domain
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-.".contains(&b)))
+    .then_some(domain)
 }
 
 /// The signed-in reader's user ID, or a redirect to sign in.
