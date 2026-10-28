@@ -844,7 +844,7 @@ Later migrations add `oauth_sessions` and `oauth_requests` (M1),
 | M3 Moderation | Mod log, moderator queue and item and user review, admin pages, actions, notes, bans, merges, role badges, suggestions, AI triage | Built |
 | M4 Indexer | hydrant beside Threaded, stream consumer with cursor, backfill, edits, deletes, account events, records and votes from other apps, the Detached queue tab, hydrant lag on `/admin` | Built |
 | M5 Reader features | Inbox, read ribbons, saved, hidden, filters, feeds, cross-post, archive links, comment folding, keyboard navigation | Next |
-| M6 Atmosphere | Project submissions, lexicon search, network stats, labels from labelers, Bluesky blocks honored both ways | |
+| M6 Atmosphere | Project submissions, `at://` links, lexicon search, publishing Threaded's schemas, labels from labelers, Bluesky blocks honored both ways | |
 | M7 Polish | Themes chosen by the reader (light, dark, the system's choice, and Hotdog Stand), each passing `make a11y`; WCAG work beyond AA where it helps readers, such as a high-contrast theme at 7:1 and reduced motion; a full keyboard, screen reader, and zoom pass over every flow (§13.1) | |
 
 Not yet in a milestone:
@@ -867,9 +867,6 @@ Not yet in a milestone:
   this post" through `blue.microcosm.links.getBacklinks`.
 - Whether to embed hydrant as a library in the `threaded` binary once it is
   published to crates.io.
-- Whether to add network stats (events per collection namespace over time).
-  hydrant in filter mode sees only Threaded's records, so this needs a
-  full-network source.
 - Whether to give link previews an image (`og:image`) per story. Pages carry
   `og:title` and `og:description` now, and previews show text only. An image
   would be drawn when first requested and cached, not when the story is
