@@ -73,10 +73,13 @@ for tab in edits holds suggestions detached; do
 done
 curl -fs -H "Cookie: $cookie" "$base/s/$theirs/suggest" >/dev/null || { echo "the suggest page refused the fixture user"; exit 1; }
 curl -fs -H "Cookie: $cookie" "$base/u/a11y.example" | grep -q 'Hidden from others' || { echo "the profile lists no hidden posts"; exit 1; }
+# Read the unread count from another page: opening /inbox would mark the
+# replies read, and the audit would never see a "new" marker.
+curl -fs -H "Cookie: $cookie" "$base/settings" | grep -q '>inbox ([0-9]' || { echo "the inbox has no unread replies"; exit 1; }
 for list in saved hidden; do
   curl -fs -H "Cookie: $cookie" "$base/$list" | grep -q 'class="story"' || { echo "/$list is empty"; exit 1; }
 done
-A11Y_COOKIE="$cookie" node "$here/audit.mjs" "$base" / "$mine" "$mine/edit" /submit "/c/$comment/reply" "/c/$comment/edit" /settings /saved /hidden /u/a11y.example /u/other.example \
+A11Y_COOKIE="$cookie" node "$here/audit.mjs" "$base" / "$mine" "$mine/edit" /submit "/c/$comment/reply" "/c/$comment/edit" /settings /inbox /saved /hidden /u/a11y.example /u/other.example \
   /mod "/mod/s/$sid" /mod/c/"$comment" /mod/u/did:plc:a11yother /moderations /admin /admin/settings /admin/tags /admin/people \
   "/mod?tab=edits" "/s/$theirs/suggest" "/mod?tab=holds" "/mod?tab=suggestions" /admin/rules /moderations/stats \
   "/mod?tab=detached" "/mod/s/$detached"

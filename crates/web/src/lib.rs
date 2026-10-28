@@ -4,6 +4,7 @@ pub mod auth;
 pub mod blog;
 pub mod handles;
 pub mod identity;
+pub mod inbox;
 pub mod markdown;
 pub mod origin;
 pub mod staff;
@@ -178,6 +179,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/settings", get(write::settings_page).post(write::settings))
         .route("/u/{handle}", get(write::profile))
+        .route("/inbox", get(inbox::inbox))
         .route("/saved", get(saved))
         .route("/hidden", get(hidden))
         .route("/s/{short_id}/save", axum::routing::post(write::save))

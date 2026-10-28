@@ -142,6 +142,8 @@ pub struct Viewer {
     pub name: Option<String>,
     pub csrf: String,
     pub me: Option<Me>,
+    /// Unread replies, for the header.
+    pub inbox: i64,
     /// This page's path and query without transient parameters, for forms
     /// that come back here.
     pub here: String,
@@ -187,6 +189,7 @@ impl FromRequestParts<AppState> for Viewer {
             name: None,
             csrf,
             me: None,
+            inbox: 0,
             url: st.origin.url(&here),
             here,
         };
@@ -201,6 +204,13 @@ impl FromRequestParts<AppState> for Viewer {
                 if let Ok(Some(user)) = st.store.user_by_did(&session.did).await {
                     crate::handles::refresh(st, &[user.id]).await;
                     viewer.name = Some(user.name().to_string());
+                    viewer.inbox = match st.store.unread_replies(user.id).await {
+                        Ok(n) => n,
+                        Err(e) => {
+                            tracing::warn!(error = %e, "counting unread replies");
+                            0
+                        }
+                    };
                     viewer.me = Some(Me {
                         user_id: user.id,
                         session,

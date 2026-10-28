@@ -8,6 +8,7 @@ use threaded_core::search::{Query, Sort};
 
 mod accept;
 mod handles;
+mod inbox;
 mod m2;
 mod moderation;
 mod network;
@@ -136,7 +137,7 @@ pub(crate) const STORY_COLUMNS: &str =
 
 /// Stories everyone may see: not deleted, merged, removed, held, or
 /// detached, by an account the network reports active.
-const VISIBLE: &str = "s.deleted_at IS NULL AND s.merged_into IS NULL \
+pub(crate) const VISIBLE: &str = "s.deleted_at IS NULL AND s.merged_into IS NULL \
      AND s.removed_at IS NULL AND s.held_at IS NULL AND s.detached_at IS NULL \
      AND NOT EXISTS (SELECT 1 FROM users x WHERE x.id = s.user_id AND x.inactive_at IS NOT NULL)";
 

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Inbox | {{ site }}{% endblock %}
+{% block main %}
+<h1>Inbox</h1>
+<p class="lead">Comments on your stories and replies to your comments, newest first.</p>
+{% if replies.is_empty() %}
+<p class="empty">No replies yet.</p>
+{% else %}
+<ol class="profile-comments">
+{% for r in replies %}
+<li><article aria-label="{% if r.on_story %}Comment{% else %}Reply{% endif %} by {{ r.handle }}, {{ r.age }}">
+  <p class="meta">{% if r.unread %}<strong class="new">new</strong> {% endif %}<a class="handle" href="/u/{{ r.handle }}">{{ r.handle }}</a> {% if r.on_story %}commented on your story{% else %}replied to your comment on{% endif %} <a href="/s/{{ r.story_id }}">{{ r.story_title }}</a> | <a href="/s/{{ r.story_id }}#c-{{ r.short_id }}">{{ r.age }}</a></p>
+  <div class="prose">{{ r.body_html|safe }}</div>
+  <p class="meta"><a href="/c/{{ r.short_id }}/reply">reply</a></p>
+</article></li>
+{% endfor %}
+</ol>
+{% endif %}
+{% if prev.is_some() || next.is_some() %}
+<nav class="pager" aria-label="Pages">
+  {% if let Some(p) = prev %}<a href="{{ p }}" rel="prev">Previous: page {{ page - 1 }}</a>{% endif %}
+  {% if let Some(n) = next %}<a href="{{ n }}" rel="next">Next: page {{ page + 1 }}</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}
