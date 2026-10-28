@@ -343,6 +343,10 @@ pub async fn story_page(
     if row.hidden() && !is_mine && !is_moderator {
         return Err(AppError::NotFound);
     }
+    // Recorded before the row is built, so this page shows nothing as new.
+    if let Some(a) = &a {
+        st.store.record_read(a.user.id, row.id, now).await?;
+    }
     let policy = st.policy();
     let votes: HashMap<Target, threaded_store::VoteRow> = match &a {
         Some(a) => st

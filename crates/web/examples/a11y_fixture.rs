@@ -303,6 +303,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .fetch_one(store.pool())
     .await?;
     store.set_hidden(me, seeded, true, now).await?;
+    // A read before the other account's comments, so the story's row says
+    // what is new.
+    let story_row = store.story(&story).await?.ok_or("story missing")?;
+    store.record_read(me, story_row.id, now - 550).await?;
 
     let key = cookie::Key::from(&std::fs::read(&key_file)?);
     let mut jar = cookie::CookieJar::new();

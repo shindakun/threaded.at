@@ -76,6 +76,8 @@ curl -fs -H "Cookie: $cookie" "$base/u/a11y.example" | grep -q 'Hidden from othe
 # Read the unread count from another page: opening /inbox would mark the
 # replies read, and the audit would never see a "new" marker.
 curl -fs -H "Cookie: $cookie" "$base/settings" | grep -q '>inbox ([0-9]' || { echo "the inbox has no unread replies"; exit 1; }
+# Before the audit opens the story page, which marks it read.
+curl -fs -H "Cookie: $cookie" "$base/" | grep -q 'class="new">[0-9]* new' || { echo "no row shows new comments"; exit 1; }
 for list in saved hidden; do
   curl -fs -H "Cookie: $cookie" "$base/$list" | grep -q 'class="story"' || { echo "/$list is empty"; exit 1; }
 done

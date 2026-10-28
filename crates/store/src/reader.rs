@@ -1,6 +1,6 @@
-//! What one reader keeps for themselves: saved stories, hidden stories, and
-//! filtered tags. All of it is private and lives only in this database; none
-//! of it is a record.
+//! What one reader keeps for themselves: saved stories, hidden stories,
+//! filtered tags, and when they last read each story. All of it is private
+//! and lives only in this database; none of it is a record.
 
 use sqlx::{QueryBuilder, Sqlite};
 
@@ -48,6 +48,55 @@ impl Store {
             }
         }
         Ok(m)
+    }
+
+    /// Records that a reader opened a story page.
+    pub async fn record_read(&self, user_id: i64, story_id: i64, now: i64) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO story_reads (user_id, story_id, read_at) VALUES (?1, ?2, ?3) \
+             ON CONFLICT(user_id, story_id) DO UPDATE SET read_at = max(read_at, ?3)",
+        )
+        .bind(user_id)
+        .bind(story_id)
+        .bind(now)
+        .execute(self.pool())
+        .await?;
+        Ok(())
+    }
+
+    /// For each of these stories the reader has opened, the comments written
+    /// since, counting only comments the reader can see and not their own.
+    /// Stories the reader never opened, or with nothing new, are left out.
+    pub async fn new_comments(&self, user_id: i64, story_ids: &[i64]) -> Result<Vec<(i64, i64)>> {
+        if story_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut qb = QueryBuilder::<Sqlite>::new(
+            "SELECT r.story_id, count(*) FROM story_reads r \
+             JOIN comments c ON c.story_id = r.story_id AND c.created_at > r.read_at \
+             JOIN users u ON u.id = c.user_id \
+             WHERE c.deleted_at IS NULL AND c.removed_at IS NULL AND c.held_at IS NULL \
+             AND u.inactive_at IS NULL AND c.user_id <> r.user_id AND r.user_id = ",
+        );
+        qb.push_bind(user_id).push(" AND r.story_id IN (");
+        let mut sep = qb.separated(", ");
+        for id in story_ids {
+            sep.push_bind(*id);
+        }
+        sep.push_unseparated(") GROUP BY r.story_id");
+        qb.build_query_as().fetch_all(self.pool()).await
+    }
+
+    /// Drops reads of stories created before `cutoff`: they are past the
+    /// lock age and take no new comments. Returns how many were dropped.
+    pub async fn prune_story_reads(&self, cutoff: i64) -> Result<u64> {
+        let r = sqlx::query(
+            "DELETE FROM story_reads WHERE story_id IN (SELECT id FROM stories WHERE created_at < ?)",
+        )
+        .bind(cutoff)
+        .execute(self.pool())
+        .await?;
+        Ok(r.rows_affected())
     }
 
     /// The tags a reader filters out, by name.

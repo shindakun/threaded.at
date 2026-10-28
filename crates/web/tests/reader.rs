@@ -246,3 +246,54 @@ async fn rows_offer_save_and_hide_to_readers_who_are_signed_in() {
         "{found}"
     );
 }
+
+#[tokio::test]
+async fn rows_say_how_many_comments_are_new_since_the_last_read() {
+    let w = world().await;
+    let alice = w.user("alice.example", &base(), 100, 0).await;
+    let bob = w.user("bob.example", &base(), 100, 0).await;
+    let id = w
+        .submit(&alice, "Story", "https://e.example/n", &["rust"])
+        .await;
+    w.post("/comment", &alice, &[("story", &id), ("text", "One")])
+        .await;
+    assert!(
+        !w.get("/", &bob).await.body.contains("new</strong>"),
+        "nothing is new on a story bob never opened"
+    );
+
+    assert_eq!(
+        w.get(&format!("/s/{id}"), &bob).await.status,
+        StatusCode::OK
+    );
+    // The test clock stands still, so date the first comment and bob's
+    // read in the past; comments posted from here on come after the read.
+    sqlx::query("UPDATE comments SET created_at = created_at - 20")
+        .execute(w.store.pool())
+        .await
+        .unwrap();
+    sqlx::query("UPDATE story_reads SET read_at = read_at - 10")
+        .execute(w.store.pool())
+        .await
+        .unwrap();
+    assert!(!w.get("/", &bob).await.body.contains("new</strong>"));
+    w.post("/comment", &alice, &[("story", &id), ("text", "Two")])
+        .await;
+    w.post("/comment", &bob, &[("story", &id), ("text", "Mine")])
+        .await;
+    let front = w.get("/", &bob).await.body;
+    assert!(
+        front.contains(r#"3 comments</a>, <strong class="new">1 new</strong>"#),
+        "{front}"
+    );
+    assert!(
+        !w.get("/", &alice).await.body.contains("new</strong>"),
+        "ribbons are per reader"
+    );
+    let page = w.get(&format!("/s/{id}"), &bob).await.body;
+    assert!(
+        !page.contains("new</strong>"),
+        "the story page itself shows nothing new"
+    );
+    assert!(!w.get("/", &bob).await.body.contains("new</strong>"));
+}

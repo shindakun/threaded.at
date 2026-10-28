@@ -1,3 +1,5 @@
+//! The replies inbox and read ribbons: what is new for a reader.
+
 use threaded_store::{NewComment, NewStory, Store};
 
 const T0: i64 = 1_790_000_000;
@@ -171,4 +173,65 @@ async fn accounts_from_before_the_inbox_start_with_it_read() {
         .unwrap()
         .as_secs() as i64;
     assert!((now - read_at).abs() < 60, "read_at {read_at}, now {now}");
+}
+
+#[tokio::test]
+async fn read_ribbons_count_visible_comments_since_the_last_read() {
+    let s = Store::open("sqlite::memory:").await.unwrap();
+    s.upsert_tag("rust", "", 0.0).await.unwrap();
+    let alice = s
+        .record_sign_in("did:plc:alice", "alice.example", true, T0)
+        .await
+        .unwrap();
+    let bob = s
+        .record_sign_in("did:plc:bob", "bob.example", true, T0)
+        .await
+        .unwrap();
+    let read = story(&s, alice, "Read story").await;
+    let unread = story(&s, alice, "Never opened").await;
+    comment(&s, read, alice, None, T0 + 5).await;
+    s.record_read(bob, read, T0 + 10).await.unwrap();
+
+    // Before and at the read time, and bob's own, do not count.
+    comment(&s, read, alice, None, T0 + 10).await;
+    comment(&s, read, bob, None, T0 + 11).await;
+    let counted = comment(&s, read, alice, None, T0 + 12).await;
+    comment(&s, read, alice, Some(counted), T0 + 13).await;
+    for column in ["deleted_at", "removed_at", "held_at"] {
+        let c = comment(&s, read, alice, None, T0 + 14).await;
+        sqlx::query(&format!("UPDATE comments SET {column} = 1 WHERE id = ?"))
+            .bind(c)
+            .execute(s.pool())
+            .await
+            .unwrap();
+    }
+    comment(&s, unread, alice, None, T0 + 15).await;
+
+    let both = [read, unread];
+    assert_eq!(s.new_comments(bob, &both).await.unwrap(), [(read, 2)]);
+    assert!(s.new_comments(alice, &both).await.unwrap().is_empty());
+    assert!(s.new_comments(bob, &[]).await.unwrap().is_empty());
+
+    // A later read clears it; an earlier one, such as a slow request
+    // finishing late, does not move the time back.
+    s.record_read(bob, read, T0 + 20).await.unwrap();
+    assert!(s.new_comments(bob, &both).await.unwrap().is_empty());
+    s.record_read(bob, read, T0 + 1).await.unwrap();
+    assert!(s.new_comments(bob, &both).await.unwrap().is_empty());
+
+    // Pruning drops reads of stories older than the cutoff.
+    let reads = || async {
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM story_reads")
+            .fetch_one(s.pool())
+            .await
+            .unwrap()
+    };
+    assert_eq!(
+        s.prune_story_reads(T0).await.unwrap(),
+        0,
+        "created at T0, not before"
+    );
+    assert_eq!(reads().await, 1);
+    assert_eq!(s.prune_story_reads(T0 + 1).await.unwrap(), 1);
+    assert_eq!(reads().await, 0);
 }

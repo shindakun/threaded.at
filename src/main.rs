@@ -195,6 +195,20 @@ async fn serve(db: &str) -> Result<(), BoxError> {
     let mut state = threaded_web::AppState::new(store.clone(), blog, auth);
     state.origin = origin;
     state.set_policy(policy);
+
+    // Read ribbons for stories past the lock age are no use: they take no
+    // new comments. The lock age is read each hour, since admins change it.
+    let reads = state.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            tick.tick().await;
+            let cutoff = (reads.clock)() - reads.policy().lock_days * 86_400;
+            if let Err(e) = reads.store.prune_story_reads(cutoff).await {
+                tracing::warn!(error = %e, "pruning read ribbons");
+            }
+        }
+    });
     state
         .rules_ready
         .store(rules_ready, std::sync::atomic::Ordering::Relaxed);

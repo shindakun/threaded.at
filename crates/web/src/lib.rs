@@ -221,6 +221,9 @@ pub struct StoryView {
     pub saved: bool,
     /// The signed-in reader hid this story from their listings.
     pub hidden: bool,
+    /// Comments since the signed-in reader last opened the story; zero
+    /// when there are none or they never opened it.
+    pub new_comments: i64,
     /// The row offers save and hide: false for a story readers cannot see,
     /// shown to its author or a moderator.
     pub markable: bool,
@@ -249,6 +252,7 @@ impl StoryView {
             saved: false,
             hidden: false,
             markable: true,
+            new_comments: 0,
             href: r
                 .url
                 .clone()
@@ -792,7 +796,8 @@ pub(crate) async fn badge_map(
 }
 
 /// Fills in what a story row needs beyond its database row: the authors'
-/// badges, and for a signed-in viewer, their upvotes, saves, and hides.
+/// badges, and for a signed-in viewer, their upvotes, saves, hides, and
+/// comments new since they last read each story.
 pub(crate) async fn prepare_rows(
     st: &AppState,
     viewer: &Viewer,
@@ -808,11 +813,18 @@ pub(crate) async fn prepare_rows(
     let ids: Vec<i64> = stories.iter().map(|s| s.id).collect();
     let voted = st.store.upvoted_stories(me.user_id, &ids).await?;
     let marks = st.store.marks(me.user_id, &ids).await?;
+    let fresh: HashMap<i64, i64> = st
+        .store
+        .new_comments(me.user_id, &ids)
+        .await?
+        .into_iter()
+        .collect();
     for s in stories.iter_mut() {
         s.can_vote = s.author_did != me.session.did;
         s.voted = voted.contains(&s.id);
         s.saved = marks.saved.contains(&s.id);
         s.hidden = marks.hidden.contains(&s.id);
+        s.new_comments = fresh.get(&s.id).copied().unwrap_or(0);
     }
     Ok(())
 }
