@@ -309,6 +309,10 @@ async fn a_link_storys_page_links_its_archived_copies() {
         .await;
     let page = w.get(&format!("/s/{id}"), "").await.body;
     assert!(
+        page.contains(r#"<p class="meta">Find or save an archived copy: <a"#),
+        "most new links have no copy yet, so the words promise none"
+    );
+    assert!(
         page.contains(r#"<a href="https://web.archive.org/web/https://e.example/a?b=1&#38;c=2" target="_blank" rel="noopener">archive.org<span class="vh"> (opens in a new tab)</span></a>"#),
         "{page}"
     );
@@ -329,7 +333,7 @@ async fn a_link_storys_page_links_its_archived_copies() {
         )
         .await;
     let text = r.location.unwrap();
-    assert!(!w.get(&text, "").await.body.contains("Archived copies"));
+    assert!(!w.get(&text, "").await.body.contains("archived copy"));
 }
 
 #[tokio::test]

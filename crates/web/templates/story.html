@@ -22,7 +22,7 @@
 </div>
 {% endif %}
 {% if !body_html.is_empty() %}<div class="prose story-text">{{ body_html|safe }}</div>{% endif %}
-{% if !archives.is_empty() %}<p class="meta">Archived copies: {% for (name, href) in archives %}{% if !loop.first %}, {% endif %}<a href="{{ href }}" target="_blank" rel="noopener">{{ name }}<span class="vh"> (opens in a new tab)</span></a>{% endfor %}</p>{% endif %}
+{% if !archives.is_empty() %}<p class="meta">Find or save an archived copy: {% for (name, href) in archives %}{% if !loop.first %}, {% endif %}<a href="{{ href }}" target="_blank" rel="noopener">{{ name }}<span class="vh"> (opens in a new tab)</span></a>{% endfor %}</p>{% endif %}
 <div class="item-actions">
   {% if mod_edited %}<span class="edited">edited by a moderator</span>{% else if edited %}<span class="edited">edited</span>{% endif %}
   {% if let Some(u) = bsky_url %}<a href="{{ u }}" target="_blank" rel="noopener">On Bluesky<span class="vh"> (opens in a new tab)</span></a>{% endif %}
