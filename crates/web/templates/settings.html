@@ -18,9 +18,29 @@
   <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
   <input type="hidden" name="identifier" value="{{ did }}">
   <input type="hidden" name="next" value="/settings">
-  <input type="hidden" name="flow" value="votes">
+  <input type="hidden" name="flow" value="{{ votes_grant }}">
   <button type="submit" class="primary">Grant permission</button>
 </form>
+{% endif %}
+{% if bsky_available %}
+<h2>Cross-posting to Bluesky</h2>
+<p class="lead">With this on, the submit form offers "Also post to Bluesky". A story you tick is posted to your Bluesky account as its title, with a link to its page here. Threaded can create posts but not delete them: deleting a story here leaves its Bluesky post, which you can delete on Bluesky.</p>
+{% if has_bsky_scope %}
+<form method="post" action="/settings/bsky" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <label class="check-line"><input type="checkbox" name="on" value="1"{% if cross_post %} checked{% endif %}> Offer to post my stories to Bluesky</label>
+  <button type="submit" class="primary">Save</button>
+</form>
+{% else %}
+<p>Cross-posting needs permission to create posts on your Bluesky account.</p>
+<form method="post" action="/login">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <input type="hidden" name="identifier" value="{{ did }}">
+  <input type="hidden" name="next" value="/settings">
+  <input type="hidden" name="flow" value="{{ bsky_grant }}">
+  <button type="submit" class="primary">Grant permission to post</button>
+</form>
+{% endif %}
 {% endif %}
 <h2>Tag filters</h2>
 <p class="lead">Stories with a filtered tag leave your front page, the other listings, and search. The tag's own page, and a search for <code>tag:</code> that tag, still show them. Only you are affected.</p>

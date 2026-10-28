@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query("INSERT OR REPLACE INTO oauth_sessions (did, session_id, data, updated_at) VALUES (?, ?, ?, ?)")
         .bind(did)
         .bind(sid)
-        .bind(threaded_auth::testing::session_json(did, sid, &scopes(Namespace::DEV, Flow::Votes)))
+        .bind(threaded_auth::testing::session_json(did, sid, &scopes(Namespace::DEV, Flow::VOTES)))
         .bind(now)
         .execute(store.pool())
         .await?;
@@ -334,7 +334,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query("INSERT OR REPLACE INTO oauth_sessions (did, session_id, data, updated_at) VALUES (?, ?, ?, ?)")
         .bind(reader_did)
         .bind(reader_sid)
-        .bind(threaded_auth::testing::session_json(reader_did, reader_sid, &scopes(Namespace::DEV, Flow::Base)))
+        .bind(threaded_auth::testing::session_json(reader_did, reader_sid, &scopes(Namespace::DEV, Flow::BASE)))
         .bind(now)
         .execute(store.pool())
         .await?;

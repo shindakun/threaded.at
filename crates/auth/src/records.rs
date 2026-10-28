@@ -110,6 +110,8 @@ pub struct MemoryRepo {
     pub writes: Mutex<Vec<Written>>,
     /// When set, every write fails with this message.
     pub fail: Mutex<Option<String>>,
+    /// When set, writes to this collection fail with the message.
+    pub fail_collection: Mutex<Option<(String, String)>>,
 }
 
 /// Writes records to the signed-in user's repo. Tests use `Memory`.
@@ -136,6 +138,11 @@ impl Writer {
     fn memory(repo: &MemoryRepo, w: Written) -> Result<RecordRef, WriteError> {
         if let Some(msg) = repo.fail.lock().unwrap().clone() {
             return Err(WriteError::Pds(msg));
+        }
+        if let Some((collection, msg)) = repo.fail_collection.lock().unwrap().clone() {
+            if collection == w.collection {
+                return Err(WriteError::Pds(msg));
+            }
         }
         let uri = format!("at://{}/{}/{}", w.did, w.collection, w.rkey);
         let mut writes = repo.writes.lock().unwrap();
@@ -273,7 +280,7 @@ mod tests {
         let s = SessionRef {
             did: "did:plc:a".into(),
             session_id: "s".into(),
-            flow: Flow::Base,
+            flow: Flow::BASE,
         };
         let r = w
             .create(
@@ -364,10 +371,44 @@ pub fn vote_record(
     })
 }
 
+/// A Bluesky post for a story: the title as its text, and a link card to
+/// the story's page on Threaded. Bluesky allows 300 graphemes of text; a
+/// grapheme is at least one character, so 300 characters always fit.
+pub fn bsky_post_record(
+    title: &str,
+    page_url: &str,
+    description: &str,
+    created_at: i64,
+) -> serde_json::Value {
+    let text: String = title.chars().take(300).collect();
+    serde_json::json!({
+        "$type": crate::client::BSKY_POST,
+        "text": text,
+        "createdAt": datetime(created_at),
+        "embed": {
+            "$type": "app.bsky.embed.external",
+            "external": {
+                "uri": page_url,
+                "title": title,
+                "description": description,
+            },
+        },
+    })
+}
+
 #[cfg(test)]
 mod record_tests {
     use super::*;
     use crate::client::Namespace;
+
+    #[test]
+    fn a_bsky_post_keeps_its_text_within_the_limit() {
+        let long = "é".repeat(400);
+        let r = bsky_post_record(&long, "https://threaded.at/s/abc", "", 0);
+        assert_eq!(r["text"].as_str().unwrap().chars().count(), 300);
+        assert_eq!(r["embed"]["external"]["title"], long.as_str());
+        assert_eq!(r["$type"], "app.bsky.feed.post");
+    }
 
     #[test]
     fn datetimes_are_rfc3339_utc() {

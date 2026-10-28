@@ -40,40 +40,81 @@ impl Namespace {
     }
 }
 
-/// Which client configuration a sign-in used. jacquard-oauth sends a
-/// configuration's whole scope list, so each scope set is its own
+/// Bluesky posts, the one collection outside Threaded's namespace that it
+/// writes, and only for a user who turns cross-posting on.
+pub const BSKY_POST: &str = "app.bsky.feed.post";
+
+/// Which client configuration a sign-in used: the base scopes for
+/// submissions and comments, and any of the optional ones. jacquard-oauth
+/// sends a configuration's whole scope list, so each combination is its own
 /// configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Flow {
-    /// Submissions and comments.
-    Base,
-    /// The base scopes plus public upvotes.
-    Votes,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Flow {
+    /// Public upvotes: create and delete vote records.
+    pub votes: bool,
+    /// Cross-posting: create Bluesky posts.
+    pub bsky: bool,
 }
 
 impl Flow {
+    pub const BASE: Flow = Flow {
+        votes: false,
+        bsky: false,
+    };
+    pub const VOTES: Flow = Flow {
+        votes: true,
+        bsky: false,
+    };
+    pub const BSKY: Flow = Flow {
+        votes: false,
+        bsky: true,
+    };
+    pub const ALL: Flow = Flow {
+        votes: true,
+        bsky: true,
+    };
+
     pub fn as_str(self) -> &'static str {
-        match self {
-            Flow::Base => "base",
-            Flow::Votes => "votes",
+        match (self.votes, self.bsky) {
+            (false, false) => "base",
+            (true, false) => "votes",
+            (false, true) => "bsky",
+            (true, true) => "votes-bsky",
         }
     }
 
+    /// Anything unknown is the base flow, which grants the least.
     pub fn parse(s: &str) -> Flow {
-        if s == "votes" {
-            Flow::Votes
-        } else {
-            Flow::Base
+        match s {
+            "votes" => Flow::VOTES,
+            "bsky" => Flow::BSKY,
+            "votes-bsky" => Flow::ALL,
+            _ => Flow::BASE,
         }
+    }
+
+    /// The scopes of both.
+    pub fn with(self, other: Flow) -> Flow {
+        Flow {
+            votes: self.votes || other.votes,
+            bsky: self.bsky || other.bsky,
+        }
+    }
+
+    fn index(self) -> usize {
+        usize::from(self.votes) | usize::from(self.bsky) << 1
     }
 }
 
 pub fn scopes(ns: Namespace, flow: Flow) -> String {
-    let base = format!("atproto repo:{} repo:{}", ns.submission(), ns.comment());
-    match flow {
-        Flow::Base => base,
-        Flow::Votes => format!("{base} repo:{}?action=create&action=delete", ns.vote()),
+    let mut s = format!("atproto repo:{} repo:{}", ns.submission(), ns.comment());
+    if flow.votes {
+        s.push_str(&format!(" repo:{}?action=create&action=delete", ns.vote()));
     }
+    if flow.bsky {
+        s.push_str(&format!(" repo:{BSKY_POST}?action=create"));
+    }
+    s
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -101,29 +142,32 @@ fn uri(s: &str) -> Result<jacquard_common::deps::fluent_uri::Uri<String>, Client
     s.parse().map_err(|_| ClientError::Url(s.to_string()))
 }
 
-/// Both client configurations, sharing one client ID, key, and store.
+/// Every client configuration, one per `Flow`, sharing one client ID, key,
+/// and store.
 pub struct Clients {
     pub ns: Namespace,
-    pub base: Client,
-    pub votes: Client,
+    /// By `Flow::index`.
+    flows: [Client; 4],
 }
 
 impl Clients {
     pub fn get(&self, flow: Flow) -> &Client {
-        match flow {
-            Flow::Base => &self.base,
-            Flow::Votes => &self.votes,
-        }
+        &self.flows[flow.index()]
+    }
+
+    /// The configuration for lookups that need no particular scope.
+    pub fn base(&self) -> &Client {
+        self.get(Flow::BASE)
     }
 
     /// The metadata document declares every scope a sign-in may request, so it
     /// comes from the configuration with the largest scope set.
     pub fn metadata_json(&self) -> serde_json::Value {
-        self.votes.metadata_json()
+        self.get(Flow::ALL).metadata_json()
     }
 
     pub fn jwks_json(&self) -> Option<serde_json::Value> {
-        self.base.jwks_json()
+        self.base().jwks_json()
     }
 }
 
@@ -132,11 +176,18 @@ pub fn build(mode: Mode, store: SqliteAuthStore) -> Result<Clients, ClientError>
         Mode::Hosted { .. } => Namespace::PRODUCTION,
         Mode::Localhost { .. } => Namespace::DEV,
     };
-    Ok(Clients {
-        ns,
-        base: build_one(&mode, store.clone(), &scopes(ns, Flow::Base))?,
-        votes: build_one(&mode, store, &scopes(ns, Flow::Votes))?,
-    })
+    let one = |flow| build_one(&mode, store.clone(), &scopes(ns, flow));
+    let flows = [
+        one(Flow::BASE)?,
+        one(Flow::VOTES)?,
+        one(Flow::BSKY)?,
+        one(Flow::ALL)?,
+    ];
+    debug_assert!([Flow::BASE, Flow::VOTES, Flow::BSKY, Flow::ALL]
+        .iter()
+        .enumerate()
+        .all(|(i, f)| f.index() == i));
+    Ok(Clients { ns, flows })
 }
 
 fn build_one(mode: &Mode, store: SqliteAuthStore, scope: &str) -> Result<Client, ClientError> {
@@ -207,19 +258,40 @@ mod tests {
     #[test]
     fn scope_sets_by_namespace() {
         assert_eq!(
-            scopes(Namespace::PRODUCTION, Flow::Base),
+            scopes(Namespace::PRODUCTION, Flow::BASE),
             "atproto repo:at.threaded.submission repo:at.threaded.comment"
         );
         assert_eq!(
-            scopes(Namespace::DEV, Flow::Votes),
+            scopes(Namespace::DEV, Flow::VOTES),
             "atproto repo:at.threaded.dev.submission repo:at.threaded.dev.comment \
              repo:at.threaded.dev.vote?action=create&action=delete"
         );
+        assert_eq!(
+            scopes(Namespace::PRODUCTION, Flow::ALL),
+            "atproto repo:at.threaded.submission repo:at.threaded.comment \
+             repo:at.threaded.vote?action=create&action=delete \
+             repo:app.bsky.feed.post?action=create"
+        );
         assert!(has_scopes(
-            &scopes(Namespace::DEV, Flow::Votes),
-            &scopes(Namespace::DEV, Flow::Base)
+            &scopes(Namespace::DEV, Flow::VOTES),
+            &scopes(Namespace::DEV, Flow::BASE)
         ));
-        assert!(!has_scopes("atproto", &scopes(Namespace::DEV, Flow::Base)));
+        assert!(!has_scopes(
+            &scopes(Namespace::DEV, Flow::VOTES),
+            &scopes(Namespace::DEV, Flow::BSKY)
+        ));
+        assert!(!has_scopes("atproto", &scopes(Namespace::DEV, Flow::BASE)));
+    }
+
+    #[test]
+    fn flows_round_trip_and_combine() {
+        for f in [Flow::BASE, Flow::VOTES, Flow::BSKY, Flow::ALL] {
+            assert_eq!(Flow::parse(f.as_str()), f);
+        }
+        assert_eq!(Flow::parse(""), Flow::BASE);
+        assert_eq!(Flow::parse("everything"), Flow::BASE);
+        assert_eq!(Flow::VOTES.with(Flow::BSKY), Flow::ALL);
+        assert_eq!(Flow::BASE.with(Flow::VOTES), Flow::VOTES);
     }
 
     #[test]

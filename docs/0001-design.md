@@ -76,7 +76,11 @@ it declares `atproto` alone.
 
 Threaded never requests `transition:generic` (full account access), or any
 `blob`, `rpc`, `account`, or `identity` scope. Turning on public upvotes or
-cross-posting runs a second authorization with the larger scope set.
+cross-posting runs a second authorization with the larger scope set, which
+keeps the optional scope the session already has. A later sign-in to an
+account that has either on asks for its scope again, so signing in never
+takes a feature away. Cross-posting is offered only by a production build: a
+local one would post links to pages no one else can open.
 
 ### 2.3 Rules the callback enforces
 
@@ -683,7 +687,7 @@ in the mod log; settings changes record the old and new value.
 | Hidden stories | Removed from your listings, profiles, and search |
 | Tag filters | A filtered tag's stories leave your listings, except the tag's own page and a search for `tag:` that tag |
 | Feeds | Atom for the front page, newest, each tag, each domain, each user, and the blog |
-| Bluesky cross-post | Opt-in per story; posts the title and story link to Bluesky |
+| Bluesky cross-post | Opt-in per story; posts the title with a link card to the story's page. Threaded can create the post but not delete it. |
 | Archive links | `archive.org` and `archive.today` links on every link story's page, each to the newest copy |
 | Comment folding | Collapse a comment and its replies; the folded comments are kept in the URL fragment |
 | Keyboard navigation | `j`/`k` through stories and comments, `o` to open a story; off until turned on in settings (WCAG 2.1.4) |

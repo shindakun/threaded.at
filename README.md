@@ -147,11 +147,12 @@ section 12. A file that fails to parse is skipped and the reason is logged.
 | `/domain/{domain}` | Newest from a domain and its subdomains |
 | `/s/{short_id}` | A story and its comments |
 | `/s/{short_id}/edit`, `/s/{short_id}/delete` | Edit or delete your story |
+| `/s/{short_id}/bsky` | Form target: post your story to Bluesky again after a failed try |
 | `/c/{short_id}/reply`, `/c/{short_id}/edit`, `/c/{short_id}/delete` | Reply to a comment; edit or delete yours |
 | `/submit` | Submit a story |
 | `/comment`, `/vote`, `/flag` | Form targets for comments, upvotes, and flags |
 | `/u/{handle}` | A user's stories, comments, and public upvotes; a DID works too |
-| `/settings` | Public upvotes, tag filters, keyboard shortcuts, and keeping your posts out of AI triage (form targets `/settings/tags`, `/settings/keys`, `/settings/triage`) |
+| `/settings` | Public upvotes, cross-posting to Bluesky, tag filters, keyboard shortcuts, and keeping your posts out of AI triage (form targets `/settings/bsky`, `/settings/tags`, `/settings/keys`, `/settings/triage`) |
 | `/inbox` | Comments on your stories and replies to your comments; the header shows the unread count |
 | `/saved`, `/hidden` | Your saved stories and the stories you hid; form targets `/s/{short_id}/save` and `/s/{short_id}/hide` |
 | `/s/{short_id}/suggest` | Suggest a story's title and tags |

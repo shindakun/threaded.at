@@ -131,11 +131,11 @@ impl World {
             .unwrap();
         let key = cookie::Key::from(&super::COOKIE_KEY);
         let mut jar = cookie::CookieJar::new();
-        let flow = if scope.contains(".vote") {
-            "votes"
-        } else {
-            "base"
-        };
+        let flow = Flow {
+            votes: scope.contains(".vote"),
+            bsky: scope.contains("app.bsky.feed.post"),
+        }
+        .as_str();
         jar.private_mut(&key).add(cookie::Cookie::new(
             "threaded",
             format!("{did} {sid} {flow}"),
@@ -214,9 +214,14 @@ impl World {
 }
 
 pub fn base() -> String {
-    scopes(Namespace::DEV, Flow::Base)
+    scopes(Namespace::DEV, Flow::BASE)
 }
 
 pub fn votes() -> String {
-    scopes(Namespace::DEV, Flow::Votes)
+    scopes(Namespace::DEV, Flow::VOTES)
+}
+
+/// The base scopes plus Bluesky posts.
+pub fn bsky() -> String {
+    scopes(Namespace::DEV, Flow::BSKY)
 }

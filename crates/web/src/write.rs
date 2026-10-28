@@ -195,6 +195,10 @@ struct StoryPage {
     og_description: String,
     /// Archived copies of the story's link, by service; none for a text post.
     archives: Vec<(&'static str, String)>,
+    /// The story's Bluesky post, on bsky.app.
+    bsky_url: Option<String>,
+    /// Why the story's Bluesky post failed, shown to its author.
+    bsky_error: Option<String>,
 }
 
 /// The description a link preview shows: the start of a text post, or for a
@@ -421,6 +425,11 @@ pub async fn story_page(
         row.detached_at.is_some(),
         row.author_inactive,
     );
+    let (bsky_url, bsky_error) = match st.store.bsky_post(row.id).await? {
+        Some(threaded_store::BskyPost::Posted(uri)) => (crate::crosspost::web_url(&uri), None),
+        Some(threaded_store::BskyPost::Failed(e)) if is_mine && st.bsky => (None, Some(e)),
+        _ => (None, None),
+    };
     let mut s = StoryView::from_row(row.clone(), now);
     prepare_rows(&st, &viewer, std::slice::from_mut(&mut s)).await?;
     if locked || row.hidden() {
@@ -453,6 +462,8 @@ pub async fn story_page(
                 .as_deref()
                 .map(|u| threaded_core::link::archives(u).to_vec())
                 .unwrap_or_default(),
+            bsky_url,
+            bsky_error,
             s,
         }
         .render()?,
@@ -611,6 +622,9 @@ struct SubmitPage {
     text: String,
     authored: bool,
     tags: Vec<TagChoice>,
+    /// The form offers "Also post to Bluesky".
+    offer_bsky: bool,
+    bsky: bool,
 }
 
 #[derive(Deserialize, Default)]
@@ -627,6 +641,8 @@ pub struct SubmitForm {
     authored: Option<String>,
     #[serde(default)]
     tags: Vec<String>,
+    #[serde(default)]
+    bsky: Option<String>,
 }
 
 async fn tag_choices(
@@ -654,6 +670,7 @@ fn submit_page_html(
     viewer: Viewer,
     f: SubmitForm,
     tags: Vec<TagChoice>,
+    offer_bsky: bool,
     error: Option<String>,
 ) -> Page {
     Ok(Html(
@@ -667,6 +684,8 @@ fn submit_page_html(
             text: f.text,
             authored: f.authored.is_some(),
             tags,
+            offer_bsky,
+            bsky: f.bsky.is_some(),
         }
         .render()?,
     ))
@@ -675,7 +694,8 @@ fn submit_page_html(
 pub async fn submit_page(State(st): State<AppState>, viewer: Viewer) -> Page {
     let a = actor(&st, &viewer, "/submit").await?;
     let tags = tag_choices(&st, &a, &[]).await?;
-    submit_page_html(viewer, SubmitForm::default(), tags, None)
+    let offer = crate::crosspost::offered(&st, &a.user, &a.me.session).await;
+    submit_page_html(viewer, SubmitForm::default(), tags, offer, None)
 }
 
 /// Tag names from a form, checked against the tag rules.
@@ -709,11 +729,14 @@ pub async fn submit(
         }
         Err(r) => {
             let tags = tag_choices(&st, &a, &f.tags).await?;
-            return Ok(submit_page_html(viewer, f, tags, Some(r.to_string()))?.into_response());
+            let offer = crate::crosspost::offered(&st, &a.user, &a.me.session).await;
+            return Ok(
+                submit_page_html(viewer, f, tags, offer, Some(r.to_string()))?.into_response(),
+            );
         }
     };
 
-    require_scopes(&st, &a.me.session, Flow::Base, "/submit").await?;
+    require_scopes(&st, &a.me.session, Flow::BASE, "/submit").await?;
     let tag_refs: Vec<&str> = checked.tags.iter().map(String::as_str).collect();
     let ns = st.auth.clients.ns;
     let record = submission_record(
@@ -745,13 +768,23 @@ pub async fn submit(
             .await;
     }
     match accepted? {
-        Ok(acc) => Ok(Redirect::to(&format!("/s/{}", acc.short_id)).into_response()),
+        Ok(acc) => {
+            // Only now, with the story written and indexed: a failed post
+            // leaves the story as it is and says so on its page.
+            if f.bsky.is_some() && st.bsky && a.user.cross_post {
+                if let Some(story) = st.store.story_any(&acc.short_id).await? {
+                    crate::crosspost::post(&st, &a.me.session, &story).await?;
+                }
+            }
+            Ok(Redirect::to(&format!("/s/{}", acc.short_id)).into_response())
+        }
         Err(Refusal::Duplicate(existing)) => {
             Ok(Redirect::to(&format!("/s/{existing}?duplicate=1")).into_response())
         }
         Err(r) => {
             let tags = tag_choices(&st, &a, &f.tags).await?;
-            Ok(submit_page_html(viewer, f, tags, Some(r.to_string()))?.into_response())
+            let offer = crate::crosspost::offered(&st, &a.user, &a.me.session).await;
+            Ok(submit_page_html(viewer, f, tags, offer, Some(r.to_string()))?.into_response())
         }
     }
 }
@@ -805,7 +838,7 @@ pub async fn comment(
             })?),
         };
 
-    require_scopes(&st, &a.me.session, Flow::Base, &here).await?;
+    require_scopes(&st, &a.me.session, Flow::BASE, &here).await?;
     let ns = st.auth.clients.ns;
     let record = comment_record(ns, &subject, parent_ref.as_ref(), f.text.trim(), cx.now);
     let written = st
@@ -998,7 +1031,7 @@ pub async fn vote(
                 &a.me.session.session_id,
             )
             .await
-            .is_some_and(|g| has_scopes(&g, &scopes(st.auth.clients.ns, Flow::Votes)));
+            .is_some_and(|g| has_scopes(&g, &scopes(st.auth.clients.ns, Flow::VOTES)));
             if let (true, Some(subject)) = (has_scope, &it.record) {
                 let ns = st.auth.clients.ns;
                 match st
@@ -1224,7 +1257,7 @@ pub async fn story_edit(
     let here = format!("/s/{short_id}/edit");
     let mut cid = None;
     if let Some(uri) = &s.at_uri {
-        require_scopes(&st, &a.me.session, Flow::Base, &here).await?;
+        require_scopes(&st, &a.me.session, Flow::BASE, &here).await?;
         let ns = st.auth.clients.ns;
         let record = submission_record(
             ns,
@@ -1278,7 +1311,7 @@ pub async fn story_delete(
     let (a, s) = own_story(&st, &viewer, &short_id).await?;
     if let Some(uri) = &s.at_uri {
         let here = format!("/s/{short_id}");
-        require_scopes(&st, &a.me.session, Flow::Base, &here).await?;
+        require_scopes(&st, &a.me.session, Flow::BASE, &here).await?;
         let ns = st.auth.clients.ns;
         st.writer
             .delete(&a.me.session, &ns.submission(), RecordRef::rkey(uri))
@@ -1358,7 +1391,7 @@ pub async fn comment_edit(
     let here = format!("/s/{}#c-{short_id}", c.story_short_id);
     let mut cid = None;
     if let Some(uri) = &c.at_uri {
-        require_scopes(&st, &a.me.session, Flow::Base, &here).await?;
+        require_scopes(&st, &a.me.session, Flow::BASE, &here).await?;
         let story = st
             .store
             .story(&c.story_short_id)
@@ -1397,7 +1430,7 @@ pub async fn comment_delete(
     let (a, c) = own_comment(&st, &viewer, &short_id).await?;
     let here = format!("/s/{}", c.story_short_id);
     if let Some(uri) = &c.at_uri {
-        require_scopes(&st, &a.me.session, Flow::Base, &here).await?;
+        require_scopes(&st, &a.me.session, Flow::BASE, &here).await?;
         let ns = st.auth.clients.ns;
         st.writer
             .delete(&a.me.session, &ns.comment(), RecordRef::rkey(uri))
@@ -1418,6 +1451,14 @@ struct SettingsPage {
     nav: &'static str,
     public_votes: bool,
     has_vote_scope: bool,
+    /// The flow a sign-in for the vote scope asks for: the scopes the
+    /// session has, plus that one, so granting it never takes another away.
+    votes_grant: &'static str,
+    /// Cross-posting is offered on this site.
+    bsky_available: bool,
+    cross_post: bool,
+    has_bsky_scope: bool,
+    bsky_grant: &'static str,
     triage_opt_out: bool,
     /// AI triage is running: an API key is set and site rules exist.
     triage_on: bool,
@@ -1433,9 +1474,7 @@ pub struct SettingsQuery {
 }
 
 async fn has_vote_scope(st: &AppState, s: &SessionRef) -> bool {
-    flow::granted_scopes(&st.auth.clients, &s.did, &s.session_id)
-        .await
-        .is_some_and(|g| has_scopes(&g, &scopes(st.auth.clients.ns, Flow::Votes)))
+    crate::crosspost::granted(st, s, Flow::VOTES).await
 }
 
 pub async fn settings_page(
@@ -1445,6 +1484,8 @@ pub async fn settings_page(
 ) -> Page {
     let a = actor(&st, &viewer, "/settings").await?;
     let has_vote_scope = has_vote_scope(&st, &a.me.session).await;
+    let has_bsky_scope = crate::crosspost::granted(&st, &a.me.session, Flow::BSKY).await;
+    let flow = a.me.session.flow;
     let filtered = st.store.tag_filters(a.user.id).await?;
     let tag_filters = all_tag_choices(&st, &filtered).await?;
     Ok(Html(
@@ -1454,6 +1495,11 @@ pub async fn settings_page(
             nav: "",
             public_votes: a.user.public_votes,
             has_vote_scope,
+            votes_grant: flow.with(Flow::VOTES).as_str(),
+            bsky_available: st.bsky,
+            cross_post: a.user.cross_post,
+            has_bsky_scope,
+            bsky_grant: flow.with(Flow::BSKY).as_str(),
             triage_opt_out: st.store.triage_opt_out(a.user.id).await?,
             triage_on: st.triage_on(),
             did: a.user.did.clone(),

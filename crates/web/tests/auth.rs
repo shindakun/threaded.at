@@ -166,7 +166,8 @@ async fn localhost_client_metadata() {
     ));
     assert_eq!(
         m["scope"],
-        "atproto repo:at.threaded.dev.comment repo:at.threaded.dev.submission repo:at.threaded.dev.vote?action=create&action=delete"
+        "atproto repo:app.bsky.feed.post?action=create repo:at.threaded.dev.comment repo:at.threaded.dev.submission repo:at.threaded.dev.vote?action=create&action=delete",
+        "every scope any sign-in may ask for"
     );
     assert_eq!(m["token_endpoint_auth_method"], "none");
     assert_eq!(m["dpop_bound_access_tokens"], true);

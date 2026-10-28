@@ -2,6 +2,7 @@ use std::collections::HashMap;
 pub mod admin;
 pub mod auth;
 pub mod blog;
+pub mod crosspost;
 pub mod feed;
 pub mod handles;
 pub mod identity;
@@ -52,11 +53,15 @@ pub struct AppState {
     pub rules_ready: Arc<std::sync::atomic::AtomicBool>,
     /// The public origin, for absolute URLs in feeds and link previews.
     pub origin: origin::Origin,
+    /// Cross-posting to Bluesky is offered. Only a production build offers
+    /// it: a local build would post links to a page no one else can open.
+    pub bsky: bool,
 }
 
 impl AppState {
     pub fn new(store: Store, blog: Blog, auth: Auth) -> AppState {
         let writer = threaded_auth::records::Writer::Pds(auth.clients.clone());
+        let bsky = auth.clients.ns == threaded_auth::client::Namespace::PRODUCTION;
         let handles = handles::HandleChecker::Network(auth.clients.clone());
         AppState {
             store,
@@ -76,6 +81,7 @@ impl AppState {
             triage_key: false,
             rules_ready: Default::default(),
             origin: origin::Origin::local(8080),
+            bsky,
         }
     }
 
@@ -187,6 +193,8 @@ pub fn router(state: AppState) -> Router {
         .route("/s/{short_id}/hide", axum::routing::post(write::hide))
         .route("/settings/tags", axum::routing::post(write::settings_tags))
         .route("/settings/keys", axum::routing::post(write::settings_keys))
+        .route("/settings/bsky", axum::routing::post(crosspost::settings))
+        .route("/s/{short_id}/bsky", axum::routing::post(crosspost::retry))
         .route("/search", get(search_page))
         .route("/tags", get(tags))
         .route("/blog", get(blog_index))

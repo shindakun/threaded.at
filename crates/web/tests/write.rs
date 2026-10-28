@@ -638,6 +638,8 @@ async fn every_write_needs_the_csrf_token() {
         "/settings/triage".into(),
         "/settings/tags".into(),
         "/settings/keys".into(),
+        "/settings/bsky".into(),
+        format!("/s/{id}/bsky"),
         format!("/s/{id}/save"),
         format!("/s/{id}/hide"),
         format!("/s/{id}/edit"),

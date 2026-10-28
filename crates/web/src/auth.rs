@@ -351,6 +351,25 @@ pub async fn display_account(
     }))
 }
 
+/// The optional scopes an account's own settings need: a user with public
+/// upvotes or cross-posting on keeps that scope when they sign in again.
+pub(crate) async fn wanted_flow(
+    store: &threaded_store::Store,
+    bsky: bool,
+    did: Option<&str>,
+) -> Result<Flow, threaded_store::Error> {
+    let Some(did) = did else {
+        return Ok(Flow::BASE);
+    };
+    Ok(match store.user_by_did(did).await? {
+        Some(u) => Flow {
+            votes: u.public_votes,
+            bsky: u.cross_post && bsky,
+        },
+        None => Flow::BASE,
+    })
+}
+
 async fn confirm(
     st: &AppState,
     viewer: Viewer,
@@ -360,21 +379,24 @@ async fn confirm(
     changed: bool,
 ) -> Page {
     match flow::resolve(&st.auth.clients, &identifier).await {
-        Ok(r) => Ok(Html(
-            ConfirmPage {
-                site: SITE_NAME,
-                nav: "",
-                account: display_account(&st.store, r.account).await?,
-                viewer,
-                identifier,
-                host: r.auth_host,
-                pds: r.pds_host,
-                next,
-                flow: flow.as_str(),
-                changed,
-            }
-            .render()?,
-        )),
+        Ok(r) => {
+            let flow = flow.with(wanted_flow(&st.store, st.bsky, r.did.as_deref()).await?);
+            Ok(Html(
+                ConfirmPage {
+                    site: SITE_NAME,
+                    nav: "",
+                    account: display_account(&st.store, r.account).await?,
+                    viewer,
+                    identifier,
+                    host: r.auth_host,
+                    pds: r.pds_host,
+                    next,
+                    flow: flow.as_str(),
+                    changed,
+                }
+                .render()?,
+            ))
+        }
         Err(e) => {
             tracing::info!(error = %e, "sign-in: resolve failed");
             let msg = format!("No account or server found for \u{201c}{identifier}\u{201d}. Check the spelling, or enter your server's address.");
@@ -700,6 +722,36 @@ pub async fn typeahead(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_sign_in_keeps_the_scopes_the_account_uses() {
+        let store = threaded_store::Store::open("sqlite::memory:")
+            .await
+            .unwrap();
+        let did = "did:plc:alice";
+        let id = store
+            .record_sign_in(did, "alice.example", true, 0)
+            .await
+            .unwrap();
+        let wanted = |bsky| wanted_flow(&store, bsky, Some(did));
+        assert_eq!(wanted(true).await.unwrap(), Flow::BASE);
+        store.set_public_votes(id, true).await.unwrap();
+        assert_eq!(wanted(true).await.unwrap(), Flow::VOTES);
+        store.set_cross_post(id, true).await.unwrap();
+        assert_eq!(wanted(true).await.unwrap(), Flow::ALL);
+        assert_eq!(
+            wanted(false).await.unwrap(),
+            Flow::VOTES,
+            "no Bluesky scope where cross-posting is not offered"
+        );
+        assert_eq!(
+            wanted_flow(&store, true, Some("did:plc:nobody"))
+                .await
+                .unwrap(),
+            Flow::BASE
+        );
+        assert_eq!(wanted_flow(&store, true, None).await.unwrap(), Flow::BASE);
+    }
 
     #[test]
     fn next_is_local_only() {

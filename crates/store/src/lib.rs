@@ -7,6 +7,7 @@ use threaded_core::rank::{self, RankInput};
 use threaded_core::search::{Query, Sort};
 
 mod accept;
+mod crosspost;
 mod handles;
 mod inbox;
 mod m2;
@@ -15,6 +16,7 @@ mod network;
 mod reader;
 mod triage;
 pub use accept::*;
+pub use crosspost::*;
 pub use handles::*;
 pub use m2::*;
 pub use moderation::*;

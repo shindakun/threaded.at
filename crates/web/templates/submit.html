@@ -20,6 +20,8 @@
     {% endfor %}
   </fieldset>
   <label class="check-line"><input type="checkbox" name="authored" value="1"{% if authored %} checked{% endif %}> I wrote or made this</label>
+  {% if offer_bsky %}<label class="check-line"><input type="checkbox" name="bsky" value="1" aria-describedby="bsky-hint"{% if bsky %} checked{% endif %}> Also post to Bluesky</label>
+  <p class="hint" id="bsky-hint">Posts the title to your Bluesky account, with a link to the story's page here.</p>{% endif %}
   <button type="submit" class="primary">Submit</button>
 </form>
 {% endblock %}

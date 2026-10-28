@@ -18,6 +18,8 @@ pub struct Resolved {
     pub pds_host: Option<HostView>,
     /// The handle or DID entered, when the input named an account.
     pub account: Option<String>,
+    /// The account's DID, when the input named an account.
+    pub did: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -49,7 +51,7 @@ pub fn normalize(input: &str) -> String {
 
 pub async fn resolve(clients: &Clients, input: &str) -> Result<Resolved, FlowError> {
     let (server, doc) = clients
-        .base
+        .base()
         .oauth
         .client
         .resolve_oauth(input)
@@ -63,10 +65,12 @@ pub async fn resolve(clients: &Clients, input: &str) -> Result<Resolved, FlowErr
         .and_then(|u| host_of(u.as_str()))
         .filter(|h| h.ascii != auth_host.ascii);
     let account = doc.is_some().then(|| input.to_string());
+    let did = doc.as_ref().map(|d| d.id.to_string());
     Ok(Resolved {
         auth_host,
         pds_host,
         account,
+        did,
     })
 }
 
@@ -152,7 +156,7 @@ pub async fn check_handle_of(clients: &Clients, did: &str) -> HandleCheck {
 /// Checks a DID's handle both ways: the DID document names it, and it
 /// resolves back to the DID.
 pub async fn check_handle(clients: &Clients, did: &Did) -> HandleCheck {
-    let resolver = clients.base.oauth.client.as_ref();
+    let resolver = clients.base().oauth.client.as_ref();
     let Ok(resp) = resolver.resolve_did_doc(did).await else {
         return HandleCheck::Failed;
     };
@@ -208,7 +212,7 @@ pub async fn sign_out(clients: &Clients, flow: Flow, did: &str, session_id: &str
 pub async fn granted_scopes(clients: &Clients, did: &str, session_id: &str) -> Option<String> {
     let did = Did::new(SmolStr::new(did)).ok()?;
     let data = clients
-        .base
+        .base()
         .oauth
         .registry
         .store

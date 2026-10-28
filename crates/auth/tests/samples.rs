@@ -3,7 +3,9 @@
 //! it only builds them.
 
 use threaded_auth::client::Namespace;
-use threaded_auth::records::{comment_record, submission_record, vote_record, RecordRef};
+use threaded_auth::records::{
+    bsky_post_record, comment_record, submission_record, vote_record, RecordRef,
+};
 
 #[test]
 fn record_samples() {
@@ -62,6 +64,15 @@ fn record_samples() {
             comment_record(ns, &story, Some(&parent), "A reply.", 1_790_000_000),
         ),
         ("vote", vote_record(ns, &story, 1_790_000_000)),
+        (
+            "bsky-post",
+            bsky_post_record(
+                "Writing a B-tree",
+                "https://threaded.at/s/abc123",
+                "A link to example.com, posted by alice.example on Threaded.",
+                1_790_000_000,
+            ),
+        ),
     ];
     let Some(dir) = std::env::var_os("RECORD_SAMPLES") else {
         return;
