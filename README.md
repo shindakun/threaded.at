@@ -40,7 +40,8 @@ Working today:
 
 Next: **M5, reader features**: an inbox for replies, "new" markers on
 threads, saved and hidden stories, tag filters, Atom feeds, posting to
-Bluesky, and labels from atproto labelers. Its plan is
+Bluesky, archive links, comment folding, and keyboard shortcuts. It is built
+and waits on a deploy and the checks done by hand. Its plan is
 [docs/0008-m5.md](docs/0008-m5.md). The milestone table is in the design doc,
 section 16.
 
