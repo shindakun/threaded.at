@@ -99,7 +99,8 @@ fn validate(xml: &str, self_url: &str) -> Feed {
     assert!(root.has_tag_name((ATOM, "feed")), "{xml}");
     assert_eq!(
         root.attribute(("http://www.w3.org/XML/1998/namespace", "base")),
-        Some("https://threaded.test/")
+        None,
+        "a base on the feed makes the front page's link point at itself"
     );
     let one = |n: roxmltree::Node, name: &str| -> String {
         let found: Vec<_> = n
@@ -152,6 +153,11 @@ fn validate(xml: &str, self_url: &str) -> Feed {
                 .find(|c| c.has_tag_name((ATOM, "content")))
                 .unwrap();
             assert_eq!(content.attribute("type"), Some("html"));
+            assert_eq!(
+                content.attribute(("http://www.w3.org/XML/1998/namespace", "base")),
+                Some("https://threaded.test/"),
+                "relative links in the content resolve against the site"
+            );
             Entry {
                 id,
                 title: one(e, "title"),

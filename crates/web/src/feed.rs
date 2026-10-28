@@ -109,10 +109,7 @@ impl Feed {
             .unwrap_or(self.now);
         let mut x = String::new();
         x.push_str("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n");
-        x.push_str(&format!(
-            "<feed xmlns=\"http://www.w3.org/2005/Atom\" xml:base=\"{}\">\n",
-            esc(&self.base)
-        ));
+        x.push_str("<feed xmlns=\"http://www.w3.org/2005/Atom\">\n");
         x.push_str(&format!("<id>{}</id>\n", esc(&self.url)));
         x.push_str(&format!("<title>{}</title>\n", esc(&self.title)));
         x.push_str(&format!(
@@ -156,8 +153,12 @@ impl Feed {
             if let Some(s) = &e.summary {
                 x.push_str(&format!("<summary>{}</summary>\n", esc(s)));
             }
+            // The base sits on the content alone, where a blog post's
+            // relative links need it. On the feed it would make the front
+            // page's own link, the base itself, a same-document reference.
             x.push_str(&format!(
-                "<content type=\"html\">{}</content>\n",
+                "<content type=\"html\" xml:base=\"{}\">{}</content>\n",
+                esc(&self.base),
                 esc(&e.content)
             ));
             x.push_str("</entry>\n");
