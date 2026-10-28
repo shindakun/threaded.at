@@ -95,6 +95,20 @@ fn keygen(dir: &str) -> Result<(), BoxError> {
     Ok(())
 }
 
+/// `THREADED_PUBLIC_URL`, or the local address a development build serves on.
+fn origin(addr: &str) -> Result<threaded_web::origin::Origin, BoxError> {
+    match env("THREADED_PUBLIC_URL") {
+        Some(url) => Ok(threaded_web::origin::Origin::parse(&url)?),
+        None => {
+            let port = addr.rsplit(':').next().unwrap_or("8080");
+            let port = port
+                .parse()
+                .map_err(|_| format!("THREADED_ADDR {addr:?} has no port number"))?;
+            Ok(threaded_web::origin::Origin::local(port))
+        }
+    }
+}
+
 fn env(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.is_empty())
 }
@@ -155,6 +169,8 @@ fn auth(store: &Store, addr: &str) -> Result<threaded_web::auth::Auth, BoxError>
 
 async fn serve(db: &str) -> Result<(), BoxError> {
     let addr = std::env::var("THREADED_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".into());
+    // Checked first: a bad public URL should stop the server before anything starts.
+    let origin = origin(&addr)?;
     let store = Store::open(db).await?;
     let blog_dir = std::env::var("THREADED_BLOG_DIR").unwrap_or_else(|_| "blog".into());
     let blog = threaded_web::blog::Blog::new(blog_dir, std::time::Duration::from_secs(1));
@@ -177,6 +193,7 @@ async fn serve(db: &str) -> Result<(), BoxError> {
     );
     let rules_ready = store.current_rules().await?.is_some();
     let mut state = threaded_web::AppState::new(store.clone(), blog, auth);
+    state.origin = origin;
     state.set_policy(policy);
     state
         .rules_ready

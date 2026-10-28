@@ -142,6 +142,8 @@ pub struct Viewer {
     pub name: Option<String>,
     pub csrf: String,
     pub me: Option<Me>,
+    /// This page's absolute, shareable URL, for `og:url`.
+    pub url: String,
 }
 
 #[derive(Clone)]
@@ -181,6 +183,10 @@ impl FromRequestParts<AppState> for Viewer {
             name: None,
             csrf,
             me: None,
+            url: st.origin.url(&crate::origin::shareable(
+                parts.uri.path(),
+                parts.uri.query(),
+            )),
         };
         if let Some(session) = session_of(&jar, &st.auth) {
             let live = st

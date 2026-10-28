@@ -32,6 +32,7 @@ pub fn state(
         hydrant: None,
         // Nor the PLC directory: every DID is unknown unless a test says.
         plc: threaded_web::identity::Plc::Fixed(Default::default()),
+        origin: threaded_web::origin::Origin::parse("https://threaded.test").unwrap(),
         clock: Arc::new(move || now),
         policy: Default::default(),
         triage_key: false,

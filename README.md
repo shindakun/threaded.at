@@ -72,7 +72,7 @@ make hydrant # a local hydrant indexing at.threaded.dev.* records
 | `THREADED_DB` | `sqlite:threaded.db` |
 | `THREADED_ADDR` | `127.0.0.1:8080` |
 | `THREADED_BLOG_DIR` | `blog` |
-| `THREADED_PUBLIC_URL` | unset: the localhost development OAuth client |
+| `THREADED_PUBLIC_URL` | The public origin, such as `https://threaded.at`: the OAuth client ID and the absolute URLs in link previews. Unset: the localhost development OAuth client, and `http://127.0.0.1:` with the `THREADED_ADDR` port |
 | `THREADED_OAUTH_KEY` | required with `THREADED_PUBLIC_URL` |
 | `THREADED_COOKIE_KEY` | required with `THREADED_PUBLIC_URL`; unset in development means sessions end on restart |
 | `THREADED_ANTHROPIC_KEY` | a file holding an Anthropic API key; unset turns AI triage off |

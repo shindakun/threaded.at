@@ -5,6 +5,7 @@ pub mod blog;
 pub mod handles;
 pub mod identity;
 pub mod markdown;
+pub mod origin;
 pub mod staff;
 pub mod write;
 
@@ -47,6 +48,8 @@ pub struct AppState {
     pub triage_key: bool,
     /// A rules version exists. Triage reads nothing until one does.
     pub rules_ready: Arc<std::sync::atomic::AtomicBool>,
+    /// The public origin, for absolute URLs in feeds and link previews.
+    pub origin: origin::Origin,
 }
 
 impl AppState {
@@ -70,6 +73,7 @@ impl AppState {
             policy: Default::default(),
             triage_key: false,
             rules_ready: Default::default(),
+            origin: origin::Origin::local(8080),
         }
     }
 

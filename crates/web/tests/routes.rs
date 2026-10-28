@@ -233,3 +233,26 @@ fn url_encode(s: &str) -> String {
         })
         .collect()
 }
+
+#[tokio::test]
+async fn every_page_names_its_shareable_url() {
+    let (app, id) = app().await;
+    for (uri, want) in [
+        ("/", "https://threaded.test/"),
+        ("/newest", "https://threaded.test/newest"),
+        ("/top?t=week", "https://threaded.test/top?t=week"),
+        ("/search?q=rust", "https://threaded.test/search?q=rust"),
+    ] {
+        let (_, body) = get(&app, uri).await;
+        assert_eq!(og(&body, "url"), [want], "{uri}");
+    }
+    let (_, body) = get(&app, &format!("/s/{id}?duplicate=1")).await;
+    assert_eq!(
+        og(&body, "url"),
+        [format!("https://threaded.test/s/{id}")],
+        "a one-time notice is not part of the shared URL"
+    );
+    let (status, body) = get(&app, "/s/nope00").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(og(&body, "url"), ["https://threaded.test/s/nope00"]);
+}
