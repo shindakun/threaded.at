@@ -186,6 +186,7 @@ pub fn router(state: AppState) -> Router {
         .route("/s/{short_id}/save", axum::routing::post(write::save))
         .route("/s/{short_id}/hide", axum::routing::post(write::hide))
         .route("/settings/tags", axum::routing::post(write::settings_tags))
+        .route("/settings/keys", axum::routing::post(write::settings_keys))
         .route("/search", get(search_page))
         .route("/tags", get(tags))
         .route("/blog", get(blog_index))
@@ -201,6 +202,8 @@ pub fn router(state: AppState) -> Router {
         .route("/static/site.css", get(css))
         .route("/static/login.js", get(login_js))
         .route("/static/vote.js", get(vote_js))
+        .route("/static/thread.js", get(thread_js))
+        .route("/static/keys.js", get(keys_js))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             error_pages,
@@ -867,6 +870,20 @@ async fn vote_js() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
         include_str!("../static/vote.js"),
+    )
+}
+
+async fn thread_js() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        include_str!("../static/thread.js"),
+    )
+}
+
+async fn keys_js() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        include_str!("../static/keys.js"),
     )
 }
 

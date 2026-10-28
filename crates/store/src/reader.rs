@@ -110,6 +110,15 @@ impl Store {
         .await
     }
 
+    pub async fn set_keyboard_shortcuts(&self, user_id: i64, on: bool) -> Result<()> {
+        sqlx::query("UPDATE users SET keyboard_shortcuts = ? WHERE id = ?")
+            .bind(on)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     /// Replaces a reader's tag filters. Names that are not active tags are
     /// skipped; the caller checks them first to say so.
     pub async fn set_tag_filters(&self, user_id: i64, names: &[String]) -> Result<()> {

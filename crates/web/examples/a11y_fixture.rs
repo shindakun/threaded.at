@@ -1,6 +1,7 @@
 //! Adds a signed-in admin with a story, a thread, votes, flags, and
 //! moderation history to a development database, then prints the session
-//! cookie (`name=value`) for the accessibility audit of signed-in pages.
+//! cookie (`name=value`) for the accessibility audit of signed-in pages,
+//! the fixture's IDs, and a plain reader's cookie for the browser checks.
 //!
 //! usage: a11y_fixture DB_URL COOKIE_KEY_FILE
 
@@ -134,6 +135,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .await?;
     let removed_id = store.comment(&removed).await?.ok_or("comment missing")?.id;
+    // A second thread, so the browser checks see j move past a folded one.
+    store
+        .insert_comment(&NewComment {
+            story_id,
+            user_id: other,
+            parent_id: None,
+            body: "A second top-level comment.",
+            created_at: now - 280,
+            record: None,
+        })
+        .await?;
     // One of the signed-in user's own posts, removed, so their profile lists
     // it under "Hidden from others".
     let mine_removed = store
@@ -308,15 +320,57 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let story_row = store.story(&story).await?.ok_or("story missing")?;
     store.record_read(me, story_row.id, now - 550).await?;
 
+    // A plain reader for the browser checks. Upvotes stay private, so a
+    // vote writes nothing to a PDS, which this fixture does not have.
+    let (reader_did, reader_sid) = ("did:plc:a11yreader", "a11y-reader-session");
+    let reader = store
+        .record_sign_in(reader_did, "reader.example", true, now)
+        .await?;
+    sqlx::query("UPDATE users SET created_at = ? WHERE id = ?")
+        .bind(now - 200 * DAY)
+        .bind(reader)
+        .execute(store.pool())
+        .await?;
+    sqlx::query("INSERT OR REPLACE INTO oauth_sessions (did, session_id, data, updated_at) VALUES (?, ?, ?, ?)")
+        .bind(reader_did)
+        .bind(reader_sid)
+        .bind(threaded_auth::testing::session_json(reader_did, reader_sid, &scopes(Namespace::DEV, Flow::Base)))
+        .bind(now)
+        .execute(store.pool())
+        .await?;
+    // A text post, newest of all, so a check of the "o" key opens a page on
+    // this site rather than an outside link.
+    store
+        .insert_story(&NewStory {
+            user_id: other,
+            title: "A text post",
+            link: None,
+            body: "Words, and no link.",
+            user_is_author: true,
+            tags: &["rust"],
+            created_at: now,
+            record: Some((
+                "at://did:plc:a11yother/at.threaded.dev.submission/3mtext",
+                "bafytext",
+            )),
+        })
+        .await?;
+
     let key = cookie::Key::from(&std::fs::read(&key_file)?);
     let mut jar = cookie::CookieJar::new();
     jar.private_mut(&key).add(cookie::Cookie::new(
         "threaded",
         format!("{did} {sid} votes"),
     ));
+    let mut reader_jar = cookie::CookieJar::new();
+    reader_jar.private_mut(&key).add(cookie::Cookie::new(
+        "threaded",
+        format!("{reader_did} {reader_sid} base"),
+    ));
     println!(
-        "threaded={} {story} {top} {theirs} {moved}",
-        jar.get("threaded").ok_or("cookie")?.value()
+        "threaded={} {story} {top} {theirs} {moved} threaded={}",
+        jar.get("threaded").ok_or("cookie")?.value(),
+        reader_jar.get("threaded").ok_or("cookie")?.value()
     );
     Ok(())
 }

@@ -51,5 +51,7 @@
 {% block main %}{% endblock %}
 </main>
 {% if viewer.me.is_some() %}<script src="/static/vote.js" defer></script>{% endif %}
+{% if viewer.keys %}<script src="/static/keys.js" defer></script>{% endif %}
+{% block scripts %}{% endblock %}
 </body>
 </html>

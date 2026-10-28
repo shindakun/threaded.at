@@ -55,9 +55,39 @@ pub fn parse(input: &str) -> Result<Link, LinkError> {
     })
 }
 
+/// Where the Wayback Machine and archive.today keep copies of a link. Each
+/// address redirects to the newest copy, or says there is none and offers
+/// to make one. Both take the URL as it is after their prefix, query
+/// included; the fragment goes, since it never reaches a server.
+pub fn archives(url: &str) -> [(&'static str, String); 2] {
+    let bare = url.split_once('#').map_or(url, |(u, _)| u);
+    [
+        ("archive.org", format!("https://web.archive.org/web/{bare}")),
+        (
+            "archive.today",
+            format!("https://archive.today/newest/{bare}"),
+        ),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn archive_addresses_keep_the_query_and_drop_the_fragment() {
+        let [(wayback, w), (today, t)] = archives("https://example.com/a?b=1&c=2#part");
+        assert_eq!(wayback, "archive.org");
+        assert_eq!(
+            w,
+            "https://web.archive.org/web/https://example.com/a?b=1&c=2"
+        );
+        assert_eq!(today, "archive.today");
+        assert_eq!(
+            t,
+            "https://archive.today/newest/https://example.com/a?b=1&c=2"
+        );
+    }
 
     #[test]
     fn variants_share_a_canonical_form() {

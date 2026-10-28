@@ -36,6 +36,13 @@
 </form>
 <h2>Saved and hidden stories</h2>
 <p>Stories you saved are on <a href="/saved">your saved list</a>. Stories you hid are on <a href="/hidden">your hidden list</a>, where you can unhide them.</p>
+<h2>Keyboard shortcuts</h2>
+<p class="lead">With shortcuts on, <kbd>j</kbd> and <kbd>k</kbd> move to the next and previous story or comment, and <kbd>o</kbd> opens the story you are on. They are off unless you turn them on, so a stray key press never moves the page, and they do nothing while you type in a form.</p>
+<form method="post" action="/settings/keys" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <label class="check-line"><input type="checkbox" name="on" value="1"{% if viewer.keys %} checked{% endif %}> Turn on keyboard shortcuts</label>
+  <button type="submit" class="primary">Save</button>
+</form>
 <h2>AI triage</h2>
 {% if triage_on %}
 <p class="lead">New posts may be read by an AI model that checks them against the site rules and flags likely spam for a moderator. It never decides alone: a moderator confirms or releases every hold. You can keep your posts out of it; a moderator reviews them instead.</p>

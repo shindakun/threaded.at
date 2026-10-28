@@ -45,9 +45,10 @@ cargo build --quiet -p threaded-web --example a11y_fixture
 bin=target/debug/threaded
 "$bin" keygen "$tmp/keys" >/dev/null
 "$bin" seed >/dev/null 2>&1
-# Signed-in session cookie, then the fixture story and comment IDs.
+# Signed-in session cookie, the fixture story and comment IDs, then a plain
+# reader's cookie for the browser checks.
 set -- $(target/debug/examples/a11y_fixture "$THREADED_DB" "$THREADED_COOKIE_KEY")
-cookie=$1 sid=$2 mine=/s/$2 comment=$3 theirs=$4 detached=$5
+cookie=$1 sid=$2 mine=/s/$2 comment=$3 theirs=$4 detached=$5 reader=$6
 "$bin" serve >"$tmp/serve.log" 2>&1 &
 pid=$!
 trap 'rc=$?; kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null || true; rm -rf "$tmp"; exit $rc' EXIT
@@ -85,3 +86,6 @@ A11Y_COOKIE="$cookie" node "$here/audit.mjs" "$base" / "$mine" "$mine/edit" /sub
   /mod "/mod/s/$sid" /mod/c/"$comment" /mod/u/did:plc:a11yother /moderations /admin /admin/settings /admin/tags /admin/people \
   "/mod?tab=edits" "/s/$theirs/suggest" "/mod?tab=holds" "/mod?tab=suggestions" /admin/rules /moderations/stats \
   "/mod?tab=detached" "/mod/s/$detached"
+# The page scripts in the browser, as the reader: their upvotes are private,
+# so a vote writes no record.
+node "$here/behavior.mjs" "$base" "$reader" "$mine"

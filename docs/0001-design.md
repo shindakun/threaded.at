@@ -684,9 +684,9 @@ in the mod log; settings changes record the old and new value.
 | Tag filters | A filtered tag's stories leave your listings, except the tag's own page and a search for `tag:` that tag |
 | Feeds | Atom for the front page, newest, each tag, each domain, each user, and the blog |
 | Bluesky cross-post | Opt-in per story; posts the title and story link to Bluesky |
-| Archive links | `archive.org` and `archive.today` links on every link story |
-| Comment folding | Collapse a thread; state kept in the URL fragment |
-| Keyboard navigation | `j`/`k` through stories and comments, progressive enhancement |
+| Archive links | `archive.org` and `archive.today` links on every link story's page, each to the newest copy |
+| Comment folding | Collapse a comment and its replies; the folded comments are kept in the URL fragment |
+| Keyboard navigation | `j`/`k` through stories and comments, `o` to open a story; off until turned on in settings (WCAG 2.1.4) |
 
 ## 12. Blog
 

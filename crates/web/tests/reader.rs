@@ -5,6 +5,8 @@ mod common;
 use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
 use common::world::*;
+use http_body_util::BodyExt;
+use tower::ServiceExt;
 
 async fn json_post(w: &World, uri: &str, who: &str, body: &str) -> Res {
     w.send(
@@ -296,4 +298,109 @@ async fn rows_say_how_many_comments_are_new_since_the_last_read() {
         "the story page itself shows nothing new"
     );
     assert!(!w.get("/", &bob).await.body.contains("new</strong>"));
+}
+
+#[tokio::test]
+async fn a_link_storys_page_links_its_archived_copies() {
+    let w = world().await;
+    let alice = w.user("alice.example", &base(), 100, 0).await;
+    let id = w
+        .submit(&alice, "Linked", "https://e.example/a?b=1&c=2", &["rust"])
+        .await;
+    let page = w.get(&format!("/s/{id}"), "").await.body;
+    assert!(
+        page.contains(r#"<a href="https://web.archive.org/web/https://e.example/a?b=1&#38;c=2" target="_blank" rel="noopener">archive.org<span class="vh"> (opens in a new tab)</span></a>"#),
+        "{page}"
+    );
+    assert!(page.contains(
+        r#"<a href="https://archive.today/newest/https://e.example/a?b=1&#38;c=2" target="_blank" rel="noopener">archive.today"#
+    ));
+
+    let r = w
+        .post(
+            "/submit",
+            &alice,
+            &[
+                ("title", "Text only"),
+                ("url", ""),
+                ("text", "Words."),
+                ("tags", "rust"),
+            ],
+        )
+        .await;
+    let text = r.location.unwrap();
+    assert!(!w.get(&text, "").await.body.contains("Archived copies"));
+}
+
+#[tokio::test]
+async fn folding_loads_only_where_there_are_comments() {
+    let w = world().await;
+    let alice = w.user("alice.example", &base(), 100, 0).await;
+    let id = w
+        .submit(&alice, "Story", "https://e.example/f", &["rust"])
+        .await;
+    let script = r#"<script src="/static/thread.js" defer></script>"#;
+    assert!(!w.get(&format!("/s/{id}"), "").await.body.contains(script));
+    w.post("/comment", &alice, &[("story", &id), ("text", "One")])
+        .await;
+    assert!(w.get(&format!("/s/{id}"), "").await.body.contains(script));
+    assert!(!w.get("/", "").await.body.contains(script));
+}
+
+#[tokio::test]
+async fn keyboard_shortcuts_are_off_until_turned_on() {
+    let w = world().await;
+    let alice = w.user("alice.example", &base(), 100, 0).await;
+    let script = r#"<script src="/static/keys.js" defer></script>"#;
+    let checkbox = r#"<input type="checkbox" name="on" value="1"> Turn on keyboard shortcuts"#;
+    assert!(!w.get("/", &alice).await.body.contains(script));
+    assert!(w.get("/settings", &alice).await.body.contains(checkbox));
+
+    let r = w.post("/settings/keys", &alice, &[("on", "1")]).await;
+    assert_eq!(r.location.as_deref(), Some("/settings?notice=saved"));
+    for page in ["/", "/newest", "/settings"] {
+        assert!(w.get(page, &alice).await.body.contains(script), "{page}");
+    }
+    assert!(w.get("/settings", &alice).await.body.contains(
+        r#"<input type="checkbox" name="on" value="1" checked> Turn on keyboard shortcuts"#
+    ));
+    let bob = w.user("bob.example", &base(), 100, 0).await;
+    assert!(
+        !w.get("/", &bob).await.body.contains(script),
+        "one reader's choice"
+    );
+    assert!(!w.get("/", "").await.body.contains(script));
+
+    let r = w.post("/settings/keys", &alice, &[]).await;
+    assert_eq!(r.location.as_deref(), Some("/settings?notice=saved"));
+    assert!(!w.get("/", &alice).await.body.contains(script));
+
+    let signed_out = format!("csrf={}", w.csrf);
+    let r = w.post("/settings/keys", &signed_out, &[("on", "1")]).await;
+    assert_eq!(r.location.as_deref(), Some("/login?next=/settings"));
+}
+
+#[tokio::test]
+async fn the_scripts_are_served() {
+    let w = world().await;
+    for path in ["/static/thread.js", "/static/keys.js"] {
+        let (status, headers, body) = {
+            let res = w
+                .app
+                .clone()
+                .oneshot(Request::get(path).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            let status = res.status();
+            let headers = res.headers().clone();
+            let body = res.into_body().collect().await.unwrap().to_bytes();
+            (status, headers, body)
+        };
+        assert_eq!(status, StatusCode::OK, "{path}");
+        assert_eq!(
+            headers[header::CONTENT_TYPE],
+            "text/javascript; charset=utf-8"
+        );
+        assert!(body.starts_with(b"//"), "{path}");
+    }
 }

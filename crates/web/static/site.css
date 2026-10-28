@@ -282,6 +282,12 @@ main > .item-actions { margin: 0 0 8px 46px; }
 .comment-head a { display: inline-flex; align-items: center; min-height: 24px; }
 .comment-head .age { color: var(--muted); }
 .deleted { color: var(--muted); margin: 4px 0; }
+/* Folding (thread.js): a folded comment keeps its head; its text and its
+   replies go. */
+.fold { min-height: 24px; }
+.deleted .fold { margin-left: 8px; }
+li.folded > .comment > :not(.comment-head, .deleted) { display: none; }
+li.folded > .thread { display: none; }
 
 /* Forms */
 .post-form, .comment-form { display: flex; flex-direction: column; gap: 6px; max-width: 42rem; margin-bottom: 18px; }

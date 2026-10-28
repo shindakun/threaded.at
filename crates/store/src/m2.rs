@@ -21,12 +21,15 @@ pub struct UserRow {
     pub last_seen_at: Option<i64>,
     /// The network reports the account inactive: deactivated or taken down.
     pub inactive_at: Option<i64>,
+    /// The reader turned on single-key shortcuts.
+    pub keyboard_shortcuts: bool,
 }
 
 /// Every column of `UserRow`, in order.
 pub(crate) const USER_COLUMNS: &str =
     "id, did, handle, handle_verified, role, karma, public_votes, \
-     vouched_by, created_at, banned_at, banned_reason, last_seen_at, inactive_at";
+     vouched_by, created_at, banned_at, banned_reason, last_seen_at, inactive_at, \
+     keyboard_shortcuts";
 
 impl UserRow {
     /// Whether this account has ever signed in here.

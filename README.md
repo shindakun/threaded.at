@@ -52,7 +52,7 @@ Requires a stable Rust toolchain, from [rustup](https://github.com/rust-lang/rus
 make seed    # demo tags and stories into threaded.db
 make run     # serve on http://127.0.0.1:8080
 make check   # fmt-check, clippy, test, audit, markdown lint, lexicon lint and validation
-make a11y    # axe-core audit of every page, light and dark
+make a11y    # axe-core audit of every page, light and dark, and the page scripts in Chrome
 make hydrant # a local hydrant indexing at.threaded.dev.* records
 ```
 
@@ -151,7 +151,7 @@ section 12. A file that fails to parse is skipped and the reason is logged.
 | `/submit` | Submit a story |
 | `/comment`, `/vote`, `/flag` | Form targets for comments, upvotes, and flags |
 | `/u/{handle}` | A user's stories, comments, and public upvotes; a DID works too |
-| `/settings` | Public upvotes, tag filters, and keeping your posts out of AI triage (form targets `/settings/tags`, `/settings/triage`) |
+| `/settings` | Public upvotes, tag filters, keyboard shortcuts, and keeping your posts out of AI triage (form targets `/settings/tags`, `/settings/keys`, `/settings/triage`) |
 | `/inbox` | Comments on your stories and replies to your comments; the header shows the unread count |
 | `/saved`, `/hidden` | Your saved stories and the stories you hid; form targets `/s/{short_id}/save` and `/s/{short_id}/hide` |
 | `/s/{short_id}/suggest` | Suggest a story's title and tags |
@@ -182,7 +182,7 @@ crates/web/        axum router, askama templates, CSS
 migrations/        forward-only SQL migrations
 tests/             tests of the threaded command line
 lexicons/          at.threaded.* lexicon schemas
-scripts/a11y/      axe-core page audit
+scripts/a11y/      axe-core page audit and browser checks of the page scripts
 blog/              blog posts, served from ./blog
 deploy/            systemd units, nginx config, backup, update, and hydrant build scripts
 docs/              design doc, deploy doc, milestone plans, and deck

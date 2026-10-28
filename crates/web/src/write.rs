@@ -193,6 +193,8 @@ struct StoryPage {
     thread: Vec<ThreadEvent>,
     /// What a link preview shows under the title.
     og_description: String,
+    /// Archived copies of the story's link, by service; none for a text post.
+    archives: Vec<(&'static str, String)>,
 }
 
 /// The description a link preview shows: the start of a text post, or for a
@@ -446,6 +448,11 @@ pub async fn story_page(
             flag,
             thread,
             og_description: og_description(&s, &row.body),
+            archives: row
+                .url
+                .as_deref()
+                .map(|u| threaded_core::link::archives(u).to_vec())
+                .unwrap_or_default(),
             s,
         }
         .render()?,
@@ -1474,6 +1481,27 @@ pub async fn settings_triage(
     let a = actor(&st, &viewer, "/settings").await?;
     st.store
         .set_triage_opt_out(a.user.id, f.opt_out.is_some())
+        .await?;
+    Ok(Redirect::to("/settings?notice=saved").into_response())
+}
+
+#[derive(Deserialize)]
+pub struct KeysForm {
+    csrf: String,
+    #[serde(default)]
+    on: Option<String>,
+}
+
+/// Single-key shortcuts, off until the reader turns them on.
+pub async fn settings_keys(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    Form(f): Form<KeysForm>,
+) -> Result<Response, AppError> {
+    check_csrf(&viewer, &f.csrf)?;
+    let user_id = crate::signed_in(&viewer, "/settings")?;
+    st.store
+        .set_keyboard_shortcuts(user_id, f.on.is_some())
         .await?;
     Ok(Redirect::to("/settings?notice=saved").into_response())
 }

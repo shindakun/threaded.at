@@ -144,6 +144,8 @@ pub struct Viewer {
     pub me: Option<Me>,
     /// Unread replies, for the header.
     pub inbox: i64,
+    /// The reader turned on single-key shortcuts; the page loads keys.js.
+    pub keys: bool,
     /// This page's path and query without transient parameters, for forms
     /// that come back here.
     pub here: String,
@@ -190,6 +192,7 @@ impl FromRequestParts<AppState> for Viewer {
             csrf,
             me: None,
             inbox: 0,
+            keys: false,
             url: st.origin.url(&here),
             here,
         };
@@ -204,6 +207,7 @@ impl FromRequestParts<AppState> for Viewer {
                 if let Ok(Some(user)) = st.store.user_by_did(&session.did).await {
                     crate::handles::refresh(st, &[user.id]).await;
                     viewer.name = Some(user.name().to_string());
+                    viewer.keys = user.keyboard_shortcuts;
                     viewer.inbox = match st.store.unread_replies(user.id).await {
                         Ok(n) => n,
                         Err(e) => {
