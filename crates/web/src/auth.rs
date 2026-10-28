@@ -27,7 +27,9 @@ const SESSION_DAYS: i64 = 30;
 const TYPEAHEAD_TTL: Duration = Duration::from_secs(30);
 const TYPEAHEAD_LIMIT: u32 = 30;
 const TYPEAHEAD_WINDOW: Duration = Duration::from_secs(10);
-const TYPEAHEAD_HOST: &str = "https://public.api.bsky.app";
+/// Where the sign-in typeahead looks handles up, unless
+/// `THREADED_TYPEAHEAD_URL` names another AppView.
+pub const TYPEAHEAD_URL: &str = "https://public.api.bsky.app";
 
 pub struct Auth {
     pub clients: Arc<Clients>,
@@ -37,6 +39,8 @@ pub struct Auth {
     pub secure: bool,
     http: reqwest::Client,
     typeahead: Mutex<Typeahead>,
+    /// The AppView the typeahead asks.
+    typeahead_url: crate::origin::Origin,
 }
 
 #[derive(Default)]
@@ -62,7 +66,15 @@ impl Auth {
                 .build()
                 .expect("HTTP client builds"),
             typeahead: Mutex::new(Typeahead::default()),
+            typeahead_url: crate::origin::Origin::parse(TYPEAHEAD_URL)
+                .expect("the default AppView is an origin"),
         }
+    }
+
+    /// Asks another AppView for typeahead suggestions.
+    pub fn with_typeahead(mut self, url: crate::origin::Origin) -> Auth {
+        self.typeahead_url = url;
+        self
     }
 
     fn name(&self, base: &str) -> String {
@@ -683,7 +695,10 @@ pub async fn typeahead(
         }
     }
 
-    let url = format!("{TYPEAHEAD_HOST}/xrpc/app.bsky.actor.searchActorsTypeahead");
+    let url = st
+        .auth
+        .typeahead_url
+        .url("/xrpc/app.bsky.actor.searchActorsTypeahead");
     let resp = st
         .auth
         .http
@@ -691,7 +706,12 @@ pub async fn typeahead(
         .query(&[("q", q.as_str()), ("limit", "6")])
         .send()
         .await;
+    // A failed answer is not cached: the next keystroke asks again.
     let Ok(resp) = resp else { return empty() };
+    if !resp.status().is_success() {
+        tracing::info!(status = %resp.status(), "typeahead: the AppView refused");
+        return empty();
+    }
     let Ok(body) = resp.json::<serde_json::Value>().await else {
         return empty();
     };

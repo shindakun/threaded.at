@@ -77,6 +77,8 @@ make hydrant # a local hydrant indexing at.threaded.dev.* records
 | `THREADED_COOKIE_KEY` | required with `THREADED_PUBLIC_URL`; unset in development means sessions end on restart |
 | `THREADED_ANTHROPIC_KEY` | a file holding an Anthropic API key; unset turns AI triage off |
 | `THREADED_HYDRANT_SOCKET` | hydrant's API socket, such as `./hydrant.sock` from `make hydrant`; unset reads no records from the network |
+| `THREADED_PLC_URL` | `https://plc.directory`: where user review reads an account's creation time |
+| `THREADED_TYPEAHEAD_URL` | `https://public.api.bsky.app`: the AppView the sign-in typeahead asks |
 | `RUST_LOG` | `info` |
 
 ## Signing in locally

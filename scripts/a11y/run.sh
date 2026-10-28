@@ -5,11 +5,14 @@ here=$(cd "$(dirname "$0")" && pwd)
 tmp=$(mktemp -d)
 port=${A11Y_PORT:-18181}
 base="http://127.0.0.1:$port"
+appview_port=$((port + 1))
 
 export THREADED_DB="sqlite:$tmp/a11y.db"
 export THREADED_ADDR="127.0.0.1:$port"
 export THREADED_BLOG_DIR="$tmp/blog"
 export THREADED_COOKIE_KEY="$tmp/keys/cookie.key"
+# The sign-in typeahead asks a stand-in AppView, started below.
+export THREADED_TYPEAHEAD_URL="http://127.0.0.1:$appview_port"
 
 mkdir "$tmp/blog" "$tmp/keys"
 cat >"$tmp/blog/sample.md" <<'MD'
@@ -51,7 +54,9 @@ set -- $(target/debug/examples/a11y_fixture "$THREADED_DB" "$THREADED_COOKIE_KEY
 cookie=$1 sid=$2 mine=/s/$2 comment=$3 theirs=$4 detached=$5 reader=$6
 "$bin" serve >"$tmp/serve.log" 2>&1 &
 pid=$!
-trap 'rc=$?; kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null || true; rm -rf "$tmp"; exit $rc' EXIT
+node "$here/fake-appview.mjs" "$appview_port" &
+appview=$!
+trap 'rc=$?; kill "$pid" "$appview" 2>/dev/null; wait "$pid" "$appview" 2>/dev/null || true; rm -rf "$tmp"; exit $rc' EXIT
 
 i=0
 until curl -fs "$base/healthz" >/dev/null; do

@@ -76,11 +76,12 @@ pub async fn world_custom(
         }
     };
     let mut state = super::state(&store, repo.clone(), now, Path::new("/nonexistent/blog"));
-    change(&mut state);
     let handles = Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
     state.handles = threaded_web::handles::HandleChecker::Fixed(handles.clone());
     let plc = Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
     state.plc = threaded_web::identity::Plc::Fixed(plc.clone());
+    // Last, so a test can replace any stand-in above.
+    change(&mut state);
     let app = router(state);
     let r = app
         .clone()

@@ -16,7 +16,7 @@ impl fmt::Display for BadOrigin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{:?} is not a public origin: give a scheme and host, such as https://threaded.at, with no path",
+            "{:?} is not an origin: give a scheme and host, such as https://threaded.at, with no path",
             self.0
         )
     }

@@ -25,7 +25,10 @@ environment:
   THREADED_OAUTH_KEY   OAuth signing key file; required with THREADED_PUBLIC_URL
   THREADED_COOKIE_KEY  cookie key file; required with THREADED_PUBLIC_URL
   THREADED_ANTHROPIC_KEY  Anthropic API key file; unset turns AI triage off
-  THREADED_HYDRANT_SOCKET hydrant's API socket; unset reads no records from the network";
+  THREADED_HYDRANT_SOCKET hydrant's API socket; unset reads no records from the network
+  THREADED_PLC_URL     PLC directory for account ages (default https://plc.directory)
+  THREADED_TYPEAHEAD_URL  AppView for sign-in suggestions (default
+                       https://public.api.bsky.app)";
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -98,7 +101,8 @@ fn keygen(dir: &str) -> Result<(), BoxError> {
 /// `THREADED_PUBLIC_URL`, or the local address a development build serves on.
 fn origin(addr: &str) -> Result<threaded_web::origin::Origin, BoxError> {
     match env("THREADED_PUBLIC_URL") {
-        Some(url) => Ok(threaded_web::origin::Origin::parse(&url)?),
+        Some(url) => threaded_web::origin::Origin::parse(&url)
+            .map_err(|e| format!("THREADED_PUBLIC_URL: {e}").into()),
         None => {
             let port = addr.rsplit(':').next().unwrap_or("8080");
             let port = port
@@ -107,6 +111,12 @@ fn origin(addr: &str) -> Result<threaded_web::origin::Origin, BoxError> {
             Ok(threaded_web::origin::Origin::local(port))
         }
     }
+}
+
+/// An outside service's origin from a setting, or its default.
+fn service_url(name: &str, default: &str) -> Result<threaded_web::origin::Origin, BoxError> {
+    let url = env(name).unwrap_or_else(|| default.to_string());
+    threaded_web::origin::Origin::parse(&url).map_err(|e| format!("{name}: {e}").into())
 }
 
 fn env(name: &str) -> Option<String> {
@@ -169,12 +179,14 @@ fn auth(store: &Store, addr: &str) -> Result<threaded_web::auth::Auth, BoxError>
 
 async fn serve(db: &str) -> Result<(), BoxError> {
     let addr = std::env::var("THREADED_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".into());
-    // Checked first: a bad public URL should stop the server before anything starts.
+    // Checked first: a bad address should stop the server before anything starts.
     let origin = origin(&addr)?;
+    let plc_url = service_url("THREADED_PLC_URL", threaded_web::identity::PLC_DIRECTORY)?;
+    let typeahead_url = service_url("THREADED_TYPEAHEAD_URL", threaded_web::auth::TYPEAHEAD_URL)?;
     let store = Store::open(db).await?;
     let blog_dir = std::env::var("THREADED_BLOG_DIR").unwrap_or_else(|_| "blog".into());
     let blog = threaded_web::blog::Blog::new(blog_dir, std::time::Duration::from_secs(1));
-    let auth = auth(&store, &addr)?;
+    let auth = auth(&store, &addr)?.with_typeahead(typeahead_url);
 
     let pruner = auth.store.clone();
     tokio::spawn(async move {
@@ -194,6 +206,7 @@ async fn serve(db: &str) -> Result<(), BoxError> {
     let rules_ready = store.current_rules().await?.is_some();
     let mut state = threaded_web::AppState::new(store.clone(), blog, auth);
     state.origin = origin;
+    state.plc = threaded_web::identity::Plc::directory_at(plc_url);
     state.set_policy(policy);
 
     // Read ribbons for stories past the lock age are no use: they take no

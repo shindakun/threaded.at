@@ -1,6 +1,7 @@
 // Checks the page scripts in a real browser: votes and saves in place,
-// comment folding and its fragment, and keyboard shortcuts only once turned
-// on. The folded and focused states also get an axe audit.
+// comment folding and its fragment, keyboard shortcuts only once turned
+// on, and the sign-in typeahead against a stand-in AppView. The folded,
+// focused, and open-list states also get an axe audit.
 //
 // usage: node behavior.mjs BASE_URL COOKIE STORY_PATH
 //   COOKIE is name=value for a plain reader whose upvotes are private.
@@ -202,6 +203,62 @@ await group("shortcuts on", async () => {
   );
   check("j visits each visible item in order, past the folded replies", seen.join(" ") === visible.join(" "), seen.join(" "));
   await audit(page, "a comment in focus");
+  await page.close();
+});
+
+// The sign-in typeahead, signed out, as someone signing in would see it.
+await group("typeahead", async () => {
+  const page = await browser.newPage();
+  await page.goto(`${base}/login`, { waitUntil: "load" });
+  const state = () =>
+    page.evaluate(() => {
+      const input = document.querySelector("#identifier");
+      const list = document.querySelector("#identifier-suggestions");
+      return {
+        value: input.value,
+        expanded: input.getAttribute("aria-expanded"),
+        active: input.getAttribute("aria-activedescendant"),
+        open: !list.hidden,
+        options: [...list.querySelectorAll('[role="option"]')].map((o) => o.textContent.trim()),
+        selected: [...list.querySelectorAll('[aria-selected="true"]')].map((o) => o.id),
+        status: document.querySelector('[data-typeahead] [role="status"]').textContent,
+      };
+    });
+  const listed = () => page.waitForFunction(() => !document.querySelector("#identifier-suggestions").hidden, { timeout: 5000 });
+
+  check("the field becomes a combobox", (await page.$eval("#identifier", (i) => i.getAttribute("role"))) === "combobox");
+  await page.type("#identifier", "@Al");
+  await listed();
+  let s = await state();
+  check("typing lists the accounts found", s.expanded === "true" && s.options.join("|") === "Alice @alice.example|alfie.example @alfie.example", s.options.join("|"));
+  check("a status line counts them", s.status === "2 accounts found", s.status);
+  await audit(page, "the suggestion list open");
+
+  await page.keyboard.press("ArrowDown");
+  s = await state();
+  check("down arrow highlights the first", s.active === "identifier-option-0" && s.selected.join() === "identifier-option-0");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowUp");
+  check("up arrow goes back", (await state()).active === "identifier-option-0");
+  await page.keyboard.press("Enter");
+  s = await state();
+  check("Enter fills the field and closes the list", s.value === "alice.example" && !s.open && s.expanded === "false", JSON.stringify(s));
+  check("Enter on a suggestion does not submit the form", new URL(page.url()).pathname === "/login", page.url());
+
+  await page.$eval("#identifier", (i) => (i.value = ""));
+  await page.type("#identifier", "al");
+  await listed();
+  await page.keyboard.press("Escape");
+  s = await state();
+  check("Escape closes the list and keeps the text", !s.open && s.value === "al", JSON.stringify(s));
+
+  await page.$eval("#identifier", (i) => (i.value = ""));
+  await page.type("#identifier", "zz");
+  await page.waitForFunction(
+    () => document.querySelector('[data-typeahead] [role="status"]').textContent === "No matching accounts",
+    { timeout: 5000 },
+  );
+  check("no match says so and lists nothing", !(await state()).open);
   await page.close();
 });
 

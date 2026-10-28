@@ -14,8 +14,8 @@ use crate::AppState;
 /// How long the review page waits for hydrant and the PLC directory.
 const WAIT: Duration = Duration::from_secs(3);
 
-/// The PLC directory.
-const PLC_DIRECTORY: &str = "https://plc.directory";
+/// The PLC directory, unless `THREADED_PLC_URL` names another.
+pub const PLC_DIRECTORY: &str = "https://plc.directory";
 
 /// What a lookup found.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,19 +33,27 @@ pub enum Found<T> {
 /// answers in tests.
 #[derive(Clone)]
 pub enum Plc {
-    Directory(reqwest::Client),
+    /// A directory at this origin.
+    Directory(reqwest::Client, crate::origin::Origin),
     /// Unix times by DID; a DID with no entry is unknown to the directory.
     Fixed(Arc<Mutex<HashMap<String, i64>>>),
 }
 
 impl Plc {
     pub fn directory() -> Plc {
+        Plc::directory_at(
+            crate::origin::Origin::parse(PLC_DIRECTORY).expect("the directory is an origin"),
+        )
+    }
+
+    pub fn directory_at(url: crate::origin::Origin) -> Plc {
         Plc::Directory(
             reqwest::Client::builder()
                 .user_agent("threaded")
                 .timeout(WAIT)
                 .build()
                 .unwrap_or_default(),
+            url,
         )
     }
 
@@ -60,7 +68,7 @@ impl Plc {
                 .unwrap()
                 .get(did)
                 .map_or(Found::No, |t| Found::Yes(*t)),
-            Plc::Directory(http) => match genesis(http, did).await {
+            Plc::Directory(http, url) => match genesis(http, url, did).await {
                 Ok(Some(t)) => Found::Yes(t),
                 Ok(None) => Found::No,
                 Err(e) => Found::Failed(format!("The PLC directory did not answer: {e}.")),
@@ -86,9 +94,13 @@ struct AuditEntry {
     created_at: String,
 }
 
-async fn genesis(http: &reqwest::Client, did: &str) -> Result<Option<i64>, String> {
+async fn genesis(
+    http: &reqwest::Client,
+    directory: &crate::origin::Origin,
+    did: &str,
+) -> Result<Option<i64>, String> {
     let resp = http
-        .get(format!("{PLC_DIRECTORY}/{did}/log/audit"))
+        .get(directory.url(&format!("/{did}/log/audit")))
         .send()
         .await
         .map_err(|e| e.to_string())?;

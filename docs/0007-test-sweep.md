@@ -82,8 +82,8 @@ Run against the built `threaded` binary, as an operator would.
 
 | Item | Why not now | Where |
 |---|---|---|
-| The PLC directory lookup on user review | Its address is fixed; a test needs it configurable to point at a fake server | M5, task 9 in `0008-m5.md` |
-| The handle typeahead on `/login` | Calls the Bluesky AppView; needs a configurable address and a fake | M5, task 9 in `0008-m5.md` |
+| The PLC directory lookup on user review | Its address is fixed; a test needs it configurable to point at a fake server | M5, task 8 in `0008-m5.md` |
+| The handle typeahead on `/login` | Calls the Bluesky AppView; needs a configurable address and a fake | M5, task 8 in `0008-m5.md` |
 | OAuth sign-in, the callback, and token refresh | Needs a real authorization server; covered by signing in by hand | By hand, on every release that touches `crates/auth` |
 | Record writes to a real PDS (`records.rs`, the `Pds` writer) | Tests use the in-memory writer by design (AGENTS.md); a fake PDS would test the fake | By hand: the M4 checks wrote, edited, and deleted real records |
 | The live handle checker (`HandleChecker::Network`) | Resolves real handles over DNS and HTTPS | By hand; its store side is tested |

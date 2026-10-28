@@ -13,6 +13,16 @@ use threaded_web::auth::Auth;
 
 pub const COOKIE_KEY: [u8; 64] = [7; 64];
 
+/// Serves `app` on a free local port in place of an outside service, such
+/// as the PLC directory or an AppView, and returns its origin.
+#[allow(dead_code)]
+pub async fn serve_fake(app: axum::Router) -> threaded_web::origin::Origin {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    threaded_web::origin::Origin::local(port)
+}
+
 /// App state on an in-memory database, with writes going to `repo`.
 #[allow(dead_code)]
 pub fn state(

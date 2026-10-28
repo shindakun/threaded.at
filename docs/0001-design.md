@@ -194,7 +194,9 @@ scripts off, or when suggestions fail, the field is a plain text input.
 **Data.** `GET /login/typeahead?q=` proxies `app.bsky.actor.searchActorsTypeahead`
 on the public AppView (`https://public.api.bsky.app`) with `limit=6`. The
 endpoint needs no auth and treats `q` as a prefix. Threaded caches each answer
-for 30 seconds, the AppView's own `max-age`, and rate-limits per IP. Proxying
+for 30 seconds, the AppView's own `max-age`, and rate-limits per IP. A failed
+answer is not cached, so the next keystroke asks again. `THREADED_TYPEAHEAD_URL`
+names another AppView. Proxying
 keeps the page at `connect-src 'self'` and keeps visitors' IP addresses off the
 AppView. Avatars load from `cdn.bsky.app`.
 

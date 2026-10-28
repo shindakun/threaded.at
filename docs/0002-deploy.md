@@ -97,6 +97,7 @@ sudo chmod 0640 /etc/threaded/oauth-key.json /etc/threaded/cookie.key
 | `THREADED_OAUTH_KEY` | `/etc/threaded/oauth-key.json` |
 | `THREADED_COOKIE_KEY` | `/etc/threaded/cookie.key` |
 | `THREADED_ANTHROPIC_KEY` | Unset, or `/etc/threaded/anthropic.key`; section 11 |
+| `THREADED_PLC_URL`, `THREADED_TYPEAHEAD_URL` | Unset: `https://plc.directory` and `https://public.api.bsky.app`. Tests point them at stand-ins |
 | `RUST_LOG` | `info` |
 
 Back up both key files. Losing the OAuth key ends every session; losing the

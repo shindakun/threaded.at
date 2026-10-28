@@ -224,21 +224,26 @@ fn unknown_commands_print_the_usage() {
 }
 
 #[test]
-fn serve_refuses_a_public_url_that_is_not_an_origin() {
+fn serve_refuses_a_service_url_that_is_not_an_origin() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("t.db");
-    for url in ["threaded.at", "https://threaded.at/path"] {
+    for (name, url) in [
+        ("THREADED_PUBLIC_URL", "threaded.at"),
+        ("THREADED_PUBLIC_URL", "https://threaded.at/path"),
+        ("THREADED_PLC_URL", "https://plc.directory/did:plc:x"),
+        ("THREADED_TYPEAHEAD_URL", "ftp://public.api.bsky.app"),
+    ] {
         let o = Command::new(env!("CARGO_BIN_EXE_threaded"))
             .arg("serve")
             .env("THREADED_DB", format!("sqlite:{}", db.display()))
-            .env("THREADED_PUBLIC_URL", url)
+            .env(name, url)
             .env("RUST_LOG", "error")
             .output()
             .unwrap();
-        assert!(!o.status.success(), "{url}");
+        assert!(!o.status.success(), "{name}={url}");
         assert!(
-            said(&o).contains("is not a public origin"),
-            "{url}: {}",
+            said(&o).contains(&format!("{name}: {url:?} is not an origin")),
+            "{name}={url}: {}",
             said(&o)
         );
     }
