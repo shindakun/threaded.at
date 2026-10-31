@@ -7,7 +7,7 @@ author: Steve
 
 ## Blogger
 
-I haven't written a blog post in ages so bear with me! With the recent PHP expolit news I've definielty though back to my early days. One of my first sites was a hand rolled PHP blog. I know that some remnants from 2004/2005 made it into the Wayback Machine but all the backend code was lost to time. Oh and there was that _Tencho Muyo!_ fansite but I can't recall if that was PHP too, 1995/96 I think? Maybe, I guess it could have been. That one was even mentioned in the _Yahoo!_ magazine, yes they had a print magazine about websites. Anyway...
+I haven't written a blog post in ages so bear with me! With the recent PHP expolit news I've definielty thought back to my early days. One of my first sites was a hand rolled PHP blog. I know that some remnants from 2004/2005 made it into the Wayback Machine but all the backend code was lost to time. Oh and there was that _Tencho Muyo!_ fansite but I can't recall if that was PHP too, 1995/96 I think? Maybe, I guess it could have been. That one was even mentioned in the _Yahoo!_ magazine, yes they had a print magazine about websites. Anyway...
 
 ## What
 
