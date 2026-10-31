@@ -54,7 +54,7 @@ Requires a stable Rust toolchain, from [rustup](https://github.com/rust-lang/rus
 make seed    # demo tags and stories into threaded.db
 make run     # serve on http://127.0.0.1:8080
 make check   # fmt-check, clippy, test, audit, markdown lint, lexicon lint and validation
-make a11y    # axe-core audit of every page, light and dark, and the page scripts in Chrome
+make a11y    # axe-core, focus, and layout audit of every page, light and dark; the page scripts in Chrome
 make hydrant # a local hydrant indexing at.threaded.dev.* records
 ```
 
@@ -187,7 +187,7 @@ crates/web/        axum router, askama templates, CSS
 migrations/        forward-only SQL migrations
 tests/             tests of the threaded command line
 lexicons/          at.threaded.* lexicon schemas
-scripts/a11y/      axe-core page audit and browser checks of the page scripts
+scripts/a11y/      axe-core and layout audit, and browser checks of the page scripts
 blog/              blog posts, served from ./blog
 deploy/            systemd units, nginx config, backup, update, and hydrant build scripts
 docs/              design doc, deploy doc, milestone plans, and deck

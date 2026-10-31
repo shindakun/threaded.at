@@ -765,6 +765,16 @@ Threaded targets WCAG 2.2 level AA on every page, in both color schemes.
 - `make a11y` seeds a scratch database, serves it, and runs axe-core 4.14 on
   every page in light and dark with the WCAG 2.0, 2.1, and 2.2 A and AA rules
   plus best practices. CI runs it on every push.
+- The same run loads each page at 320 CSS pixels wide (reflow, 1.4.10), at
+  640 (200% zoom, 1.4.4), and with the text spacing of 1.4.12 at full width
+  and at 320. A page fails if it scrolls sideways, outside code blocks and
+  tables, or if a box that hides its overflow cuts text off.
+- In each color scheme, the run also presses Tab through each page. Each
+  stop shows a focus indicator (2.4.7), its outline has 3:1 against the
+  color behind it (1.4.11), and some part of it is not under other content
+  (2.4.11). The edge of each field and drawn button has 3:1 against the
+  color around it (1.4.11). One link or button of each kind is hovered, and
+  its text keeps the contrast of 1.4.3. axe tests none of these.
 - Route tests assert one `<h1>`, a distinct `<title>`, the skip link, and
   `aria-current` on every page.
 - Automated rules find a subset of problems. Before a milestone ships, its new

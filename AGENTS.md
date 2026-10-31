@@ -105,7 +105,7 @@ Read these before changing anything:
 | Command | What it does |
 |---|---|
 | `make check` | fmt-check, clippy with warnings as errors, tests, cargo-audit, markdown lint, lexicon lint and validation. Run it before every commit. |
-| `make a11y` | axe-core audit of every page, signed out and signed in, light and dark |
+| `make a11y` | axe-core audit of every page, signed out and signed in, light and dark; focus, hover, and edge contrast; reflow at 320px, 200% zoom, and text spacing |
 | `make run` | Serve on `http://127.0.0.1:8080` with the development OAuth client |
 | `make seed` | Demo tags and stories into an empty database |
 

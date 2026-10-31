@@ -69,8 +69,9 @@ a { color: inherit; }
 
 .top {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 24px;
+  gap: 8px 24px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--rule);
   background: var(--panel);
@@ -172,7 +173,7 @@ h3 { font-size: 15px; }
 .prose th, .prose td { border: 1px solid var(--rule); padding: 4px 8px; text-align: left; }
 .back { margin-top: 28px; }
 
-.account { margin-left: auto; display: flex; align-items: baseline; gap: 10px; font-size: 14px; }
+.account { margin-left: auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 14px; }
 .account form { display: inline; }
 .account a { color: var(--soft); }
 .who { color: var(--ink); font-weight: 600; }
@@ -357,9 +358,11 @@ a.badge:hover { border-color: var(--accent); }
 .revision { white-space: pre-wrap; font: 13px var(--mono); background: var(--panel); padding: 8px; border-radius: 6px; }
 .mod-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 0 24px; }
 .mod-actions h3, .post-form h3 { font-size: 15px; margin: 8px 0 0; }
-.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; }
+.facts { display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); gap: 4px 16px; }
 .facts dt { font-weight: 600; }
 .facts dd { margin: 0; }
+/* A DID or a long number must not widen a narrow screen. */
+.facts dt, .facts dd { overflow-wrap: anywhere; }
 .inline-form { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: 8px; }
 .inline-form input[type="text"] { font: inherit; padding: 4px 8px; border: 1px solid var(--field); border-radius: 6px; background: var(--panel); color: var(--ink); }
 .verdict { margin: 6px 0; padding: 6px 10px; border-left: 3px solid var(--field); background: var(--panel); max-width: 70ch; }
