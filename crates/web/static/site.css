@@ -130,6 +130,8 @@ h3 { font-size: 15px; }
 .search { display: flex; gap: 8px; }
 .search input {
   flex: 1;
+  /* Without this, the field keeps its default width and a narrow screen scrolls. */
+  min-width: 0;
   font: inherit;
   padding: 7px 10px;
   border: 1px solid var(--field);
