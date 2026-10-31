@@ -146,7 +146,7 @@ await group("shortcuts off", async () => {
   await page.close();
 });
 
-// Shortcuts: turned on in settings, then j, k, and o.
+// Shortcuts: turned on in settings, then j, k, Enter, and o.
 await group("shortcuts on", async () => {
   const page = await open("/settings");
   await page.click("input[name=\"on\"]");
@@ -165,6 +165,19 @@ await group("shortcuts on", async () => {
   await audit(page, "a story in focus");
   await page.keyboard.press("k");
   check("k moves back", (await focused()) === 0);
+  const discuss = await page.$eval("li.story .meta a[href^='/s/']", (a) => a.href);
+  await Promise.all([page.waitForNavigation(), page.keyboard.press("Enter")]);
+  check("Enter opens the comments of the story in focus", page.url() === discuss, `${page.url()} != ${discuss}`);
+
+  await page.goto(`${base}/newest`, { waitUntil: "load" });
+  await page.keyboard.press("j");
+  await page.focus("li.story .meta a.handle");
+  const profile = await page.$eval("li.story .meta a.handle", (a) => a.href);
+  await Promise.all([page.waitForNavigation(), page.keyboard.press("Enter")]);
+  check("Enter on a link in a story follows that link", page.url() === profile, `${page.url()} != ${profile}`);
+
+  await page.goto(`${base}/newest`, { waitUntil: "load" });
+  await page.keyboard.press("j");
   const href = await page.$eval("li.story a.title", (a) => a.href);
   await Promise.all([page.waitForNavigation(), page.keyboard.press("o")]);
   check("o opens the story in focus", page.url() === href, `${page.url()} != ${href}`);
