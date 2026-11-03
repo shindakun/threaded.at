@@ -675,7 +675,7 @@ in the mod log; settings changes record the old and new value.
 
 | Feature | Description |
 |---|---|
-| Project submissions | `show` + `atproto` tags. A tangled.org repo URL renders a repo card; an `at://` URI renders the record. |
+| Project submissions | `show` + `atproto` tags. A tangled.org repo URL renders a repo card. Any story may link an `at://` URI; its title opens Threaded's page for the record, which lists where the record can be opened, since most records have no single canonical URL. A verified standard.site document links the page its author declared. |
 | Lexicon search | `/lexicons?q=` resolves an NSID through its `_lexicon` DNS record and shows the published schema, with the Threaded stories that mention it. |
 
 ## 11. Reader features
