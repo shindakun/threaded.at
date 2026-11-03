@@ -35,3 +35,6 @@ repos:
     rev: v0.23.0
     hooks:
       - id: markdownlint-cli2
+        # A fixed Node release. Without it, pre-commit installs the newest one
+        # listed by nodejs.org, and nodeenv fails on prerelease versions.
+        language_version: 26.13.0
