@@ -60,7 +60,7 @@ lex-validate: ## Validate sample records against the lexicons (needs goat)
 	RECORD_SAMPLES=$(CURDIR)/target/lex/records cargo test -q -p threaded-auth --test samples
 	for f in target/lex/records/*.json; do goat lex validate -c target/lex/catalog $$f || exit 1; done
 
-a11y: ## Audit every page with axe-core in light and dark, for focus, hover, and edge contrast, and for reflow, zoom, and text spacing (needs node and Chrome)
+a11y: ## Audit every page with axe-core and HTML_CodeSniffer in light and dark, for focus, hover, and edge contrast, and for reflow, zoom, and text spacing (needs node and Chrome)
 	scripts/a11y/run.sh
 
 hooks: ## Install pre-commit hooks

@@ -54,7 +54,7 @@ Requires a stable Rust toolchain, from [rustup](https://github.com/rust-lang/rus
 make seed    # demo tags and stories into threaded.db
 make run     # serve on http://127.0.0.1:8080
 make check   # fmt-check, clippy, test, audit, markdown lint, lexicon lint and validation
-make a11y    # axe-core, focus, and layout audit of every page, light and dark; the page scripts in Chrome
+make a11y    # axe-core, HTML_CodeSniffer, focus, and layout audit of every page, light and dark; the page scripts in Chrome
 make hydrant # a local hydrant indexing at.threaded.dev.* records
 ```
 
@@ -65,7 +65,7 @@ make hydrant # a local hydrant indexing at.threaded.dev.* records
 | `make audit` | [cargo-audit](https://github.com/rustsec/rustsec/tree/main/cargo-audit) |
 | `make md-lint` | [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) |
 | `make lex-lint`, `make lex-validate` | [goat](https://github.com/bluesky-social/goat) |
-| `make a11y` | [Node](https://github.com/nodejs/node) and Chrome or [Chromium](https://chromium.googlesource.com/chromium/src) (set `CHROME` if it is not in its default place); it installs [puppeteer-core](https://github.com/puppeteer/puppeteer) and [axe-core](https://github.com/dequelabs/axe-core) itself |
+| `make a11y` | [Node](https://github.com/nodejs/node) and Chrome or [Chromium](https://chromium.googlesource.com/chromium/src) (set `CHROME` if it is not in its default place); it installs [puppeteer-core](https://github.com/puppeteer/puppeteer), [axe-core](https://github.com/dequelabs/axe-core), and [HTML_CodeSniffer](https://github.com/squizlabs/HTML_CodeSniffer) itself |
 | `make hooks` | [pre-commit](https://github.com/pre-commit/pre-commit) |
 | `make hydrant` | a [hydrant](https://tangled.org/did:plc:dfl62fgb7wtjj3fcbb72naae/hydrant) build at `../hydrant/target/release/hydrant` (set `HYDRANT` for another path; building it is in `docs/0006-m4.md`). It keeps its database in `./hydrant.db` and serves its API on `./hydrant.sock` |
 

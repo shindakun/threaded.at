@@ -765,7 +765,9 @@ Threaded targets WCAG 2.2 level AA on every page, in both color schemes.
 
 - `make a11y` seeds a scratch database, serves it, and runs axe-core 4.14 on
   every page in light and dark with the WCAG 2.0, 2.1, and 2.2 A and AA rules
-  plus best practices. CI runs it on every push.
+  plus best practices. HTML_CodeSniffer 2.5.1 checks the same pages against
+  WCAG 2 AA; its errors fail the run, and its warnings, which ask for a check
+  by hand, do not. CI runs it on every push.
 - The same run loads each page at 320 CSS pixels wide (reflow, 1.4.10), at
   640 (200% zoom, 1.4.4), and with the text spacing of 1.4.12 at full width
   and at 320. A page fails if it scrolls sideways, outside code blocks and

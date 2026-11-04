@@ -6,6 +6,9 @@ import { findChrome, tags } from "./chrome.mjs";
 
 const require = createRequire(import.meta.url);
 const axeSource = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
+// A second rule engine. Its rules differ from axe's in places, so each
+// finds some problems the other misses.
+const htmlcsSource = readFileSync(require.resolve("html_codesniffer/build/HTMLCS.js"), "utf8");
 const inpage = new URL("./inpage.js", import.meta.url).pathname;
 
 const chrome = findChrome();
@@ -42,6 +45,24 @@ async function open(path, width, css, scheme = "light") {
   if (css) await page.addStyleTag({ content: css });
   await page.addScriptTag({ path: inpage });
   return page;
+}
+
+// HTML_CodeSniffer's errors against WCAG 2 AA. Its warnings and notices ask
+// for a check by hand and do not fail the run.
+async function htmlcs(page) {
+  await page.addScriptTag({ content: htmlcsSource });
+  return page.evaluate(
+    () =>
+      new Promise((done) => {
+        window.HTMLCS.process("WCAG2AA", document, () =>
+          done(
+            window.HTMLCS.getMessages()
+              .filter((m) => m.type === window.HTMLCS.ERROR)
+              .map((m) => `[htmlcs] ${m.code}: ${m.msg} (${m.element.outerHTML.slice(0, 80)})`),
+          ),
+        );
+      }),
+  );
 }
 
 // What axe does not test in each color scheme: the focus indicator at each
@@ -90,7 +111,7 @@ for (const scheme of ["light", "dark"]) {
     }
     let problems;
     try {
-      problems = await interaction(page);
+      problems = [...(await htmlcs(page)), ...(await interaction(page))];
     } catch (e) {
       problems = [e.message];
     }

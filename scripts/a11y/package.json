@@ -4,6 +4,7 @@
   "type": "module",
   "devDependencies": {
     "axe-core": "4.14.0",
+    "html_codesniffer": "2.5.1",
     "puppeteer-core": "25.16.0"
   }
 }
