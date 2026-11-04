@@ -3,7 +3,7 @@
 # deploy user on the droplet.
 # usage: build-hydrant.sh [SOURCE_DIR]   (default /opt/hydrant/src)
 #
-# The lockfile updates below fix 13 of the 17 advisories against hydrant's
+# The lockfile updates below fix 12 of the 16 advisories against hydrant's
 # lockfile at this commit and replace its yanked releases; docs/0006-m4.md
 # lists them, and the four advisories left.
 # Only these packages move: a plain `cargo update` would also move hydrant's
@@ -12,7 +12,7 @@
 set -eu
 
 REPO=https://tangled.org/shindakun.net/hydrant
-COMMIT=bbd9b93acbe3463af42face09a26a2ffc025d6fd
+COMMIT=f411bf4d229b113773bdcea6df2887939a913cc3
 SRC=${1:-/opt/hydrant/src}
 
 if [ ! -d "$SRC/.git" ]; then
@@ -32,7 +32,7 @@ test "$(git rev-parse HEAD)" = "$COMMIT"
 mv .cargo/config.toml .cargo/config.toml.off
 
 # Each line is PACKAGE=VERSION; PACKAGE names the old version where the lock
-# holds two of one crate. The last three replace yanked releases.
+# holds two of one crate. The last two replace yanked releases.
 for spec in \
   h2=0.4.20 \
   rustls=0.23.46 \
@@ -40,14 +40,11 @@ for spec in \
   quinn-proto=0.11.19 \
   crossbeam-epoch=0.9.21 \
   scc=3.8.8 \
-  anyhow=1.0.104 \
-  ctutils=0.4.6 \
   zstd-sys=2.1.2+zstd.1.5.7 \
   async-compression=0.4.51 \
   compression-codecs=0.4.46 \
   chacha20=0.10.2 \
-  spin@0.9.8=0.9.9 \
-  spin@0.10.0=0.10.1
+  spin@0.9.8=0.9.9
 do
   cargo update --quiet -p "${spec%=*}" --precise "${spec#*=}"
 done
