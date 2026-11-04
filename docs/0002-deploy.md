@@ -242,9 +242,10 @@ Threaded over a Unix socket. Without it, Threaded indexes only what is posted
 through its own forms. Why each setting is what it is, and which advisories
 the build fixes, is in `docs/0006-m4.md`.
 
-**Build.** `deploy/build-hydrant.sh` checks out the pinned commit, moves the
-lockfile's vulnerable and yanked packages to fixed patch releases and nothing
-else, and builds with `--locked`. The build needs `cmake` and about 5 GB of
+**Build.** `deploy/build-hydrant.sh` checks out the pinned commit of the
+fork at <https://tangled.org/shindakun.net/hydrant>, moves the lockfile's
+vulnerable and yanked packages to fixed patch releases and nothing else, and
+builds with `--locked`. The build needs `cmake` and about 5 GB of
 swap in all: the final crate compiles as one unit and is killed with less.
 Build output takes about 1.7 GB until `cargo clean`.
 

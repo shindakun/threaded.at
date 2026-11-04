@@ -1,5 +1,6 @@
 #!/bin/sh
-# Builds hydrant at the pinned commit, as the deploy user on the droplet.
+# Builds hydrant from the shindakun.net fork at the pinned commit, as the
+# deploy user on the droplet.
 # usage: build-hydrant.sh [SOURCE_DIR]   (default /opt/hydrant/src)
 #
 # The lockfile updates below fix 13 of the 17 advisories against hydrant's
@@ -10,7 +11,7 @@
 # anything else would change Cargo.lock.
 set -eu
 
-REPO=https://tangled.org/did:plc:dfl62fgb7wtjj3fcbb72naae/hydrant
+REPO=https://tangled.org/shindakun.net/hydrant
 COMMIT=bbd9b93acbe3463af42face09a26a2ffc025d6fd
 SRC=${1:-/opt/hydrant/src}
 
@@ -18,6 +19,8 @@ if [ ! -d "$SRC/.git" ]; then
   git clone "$REPO" "$SRC"
 fi
 cd "$SRC"
+# A checkout made before the switch to the fork still names the old origin.
+git remote set-url origin "$REPO"
 git fetch --quiet origin
 # --force drops the previous run's Cargo.lock changes and puts
 # .cargo/config.toml back, so every run starts from the pinned commit.
