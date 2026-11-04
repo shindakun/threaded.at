@@ -268,6 +268,8 @@ pub struct StoryView {
     pub user_id: i64,
     pub badges: Vec<threaded_store::Badge>,
     pub tags: Vec<String>,
+    /// The row stands alone, on the story's own page, rather than in a list.
+    pub alone: bool,
 }
 
 impl StoryView {
@@ -295,6 +297,7 @@ impl StoryView {
             score: r.score,
             comments: r.comment_count,
             handle: r.handle,
+            alone: false,
         }
     }
 }

@@ -77,9 +77,9 @@ a { color: inherit; }
   background: var(--panel);
 }
 .brand { font-weight: 700; color: var(--accent); text-decoration: none; font-size: 17px; }
-.top nav { display: flex; gap: 14px; flex-wrap: wrap; }
-.top nav a { color: var(--soft); text-decoration: none; }
-.top nav a[aria-current="page"], .top nav a:hover { color: var(--ink); text-decoration: underline; }
+.top .primary { display: flex; gap: 14px; flex-wrap: wrap; }
+.top .primary a { color: var(--soft); text-decoration: none; }
+.top .primary a[aria-current="page"], .top .primary a:hover { color: var(--ink); text-decoration: underline; }
 
 main { max-width: 900px; margin: 0 auto; padding: 16px 20px 48px; }
 h1 { font-size: 18px; margin: 4px 0 14px; }

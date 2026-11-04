@@ -461,6 +461,7 @@ pub async fn story_page(
         _ => (None, None),
     };
     let mut s = StoryView::from_row(row.clone(), now);
+    s.alone = true;
     prepare_rows(&st, &viewer, std::slice::from_mut(&mut s)).await?;
     if locked || row.hidden() {
         s.can_vote = false;

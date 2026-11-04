@@ -1,5 +1,5 @@
 {% import "macros.html" as m %}
-<li class="story">
+{% if s.alone %}<div class="story">{% else %}<li class="story">{% endif %}
   <div class="score">
     {% if s.can_vote %}{% call m::vote("story", s.short_id, s.voted, s.score, s.title, viewer.csrf, here) %}{% endcall %}{% endif %}
     <span class="n" data-score>{{ s.score }}</span><span class="vh"> points</span>
@@ -16,4 +16,4 @@
       {% if viewer.me.is_some() && s.markable %}| {% call m::mark("save", s.short_id, s.saved, "unsave", "save", s.title, viewer.csrf, here) %}{% endcall %} | {% call m::mark("hide", s.short_id, s.hidden, "unhide", "hide", s.title, viewer.csrf, here) %}{% endcall %}{% endif %}
     </div>
   </div>
-</li>
+{% if s.alone %}</div>{% else %}</li>{% endif %}

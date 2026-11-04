@@ -20,7 +20,7 @@
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
   <a class="brand" href="/">{{ site }}</a>
-  <nav aria-label="Primary">
+  <nav class="primary" aria-label="Primary">
     <a href="/"{% if nav == "front" %} aria-current="page"{% endif %}>front</a>
     <a href="/newest"{% if nav == "newest" %} aria-current="page"{% endif %}>newest</a>
     <a href="/active"{% if nav == "active" %} aria-current="page"{% endif %}>active</a>
@@ -32,7 +32,7 @@
     {% if viewer.is_moderator() %}<a href="/mod"{% if nav == "mod" %} aria-current="page"{% endif %}>mod</a>{% endif %}
     {% if viewer.is_admin() %}<a href="/admin"{% if nav == "admin" %} aria-current="page"{% endif %}>admin</a>{% endif %}
   </nav>
-  <div class="account">
+  <nav class="account" aria-label="Account">
     {% if let Some(name) = viewer.name %}
     <a class="who" href="/u/{{ name }}">{{ name }}</a>
     <a href="/inbox"{% if nav == "inbox" %} aria-current="page"{% endif %}>inbox{% if viewer.inbox > 0 %} ({{ viewer.inbox }}<span class="vh"> unread</span>){% endif %}</a>
@@ -45,7 +45,7 @@
     {% else %}
     <a href="/login">Sign in</a>
     {% endif %}
-  </div>
+  </nav>
 </header>
 <main id="main" tabindex="-1">
 {% block main %}{% endblock %}

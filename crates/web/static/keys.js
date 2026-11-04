@@ -5,7 +5,7 @@
 (() => {
   // Stories and comments in page order, skipping any inside a folded thread.
   function items() {
-    return [...document.querySelectorAll("main li.story, main article.comment")].filter(
+    return [...document.querySelectorAll("main .story, main article.comment")].filter(
       (el) => el.getClientRects().length > 0,
     );
   }
@@ -23,7 +23,7 @@
   }
 
   function open() {
-    const story = document.activeElement?.closest("li.story");
+    const story = document.activeElement?.closest(".story");
     const link = story?.querySelector("a.title");
     if (!link) return false;
     link.click();
@@ -34,7 +34,7 @@
   // the row, Enter does what it always does.
   function comments() {
     const story = document.activeElement;
-    if (!story?.matches("li.story")) return false;
+    if (!story?.matches(".story")) return false;
     const link = story.querySelector(".meta a[href^='/s/']");
     if (!link) return false;
     link.click();

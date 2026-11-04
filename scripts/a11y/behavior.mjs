@@ -200,7 +200,7 @@ await group("shortcuts on", async () => {
   await page.click(`#${parent} .fold`);
   await page.evaluate(() => document.activeElement.blur());
   const visible = await page.evaluate(() =>
-    [...document.querySelectorAll("main li.story, main article.comment")]
+    [...document.querySelectorAll("main .story, main article.comment")]
       .filter((el) => el.getClientRects().length > 0)
       .map((el) => el.id || el.className),
   );

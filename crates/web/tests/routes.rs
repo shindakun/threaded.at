@@ -256,3 +256,41 @@ async fn every_page_names_its_shareable_url() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(og(&body, "url"), ["https://threaded.test/s/nope00"]);
 }
+
+/// A story row is a list item in a listing. On the story's own page it
+/// stands alone, since a list of one item says nothing to a screen reader.
+#[tokio::test]
+async fn a_story_row_is_a_list_item_only_in_a_list() {
+    let w = common::world::world().await;
+    let alice = w
+        .user("alice.example", &common::world::base(), 100, 0)
+        .await;
+    let id = w
+        .submit(&alice, "A lone story", "https://e.example/lone", &["rust"])
+        .await;
+    let listing = w.get("/newest", "").await.body;
+    assert!(listing.contains(r#"<ol class="stories">"#));
+    assert!(listing.contains(r#"<li class="story">"#));
+    let page = w.get(&format!("/s/{id}"), "").await.body;
+    assert!(page.contains(r#"<div class="story">"#), "{page}");
+    assert!(!page.contains(r#"<li class="story">"#));
+    assert!(!page.contains(r#"<ol class="stories">"#));
+}
+
+/// The account links are a navigation landmark of their own, labelled apart
+/// from the primary one, signed in and out.
+#[tokio::test]
+async fn the_account_links_are_a_labelled_landmark() {
+    let w = common::world::world().await;
+    let alice = w
+        .user("alice.example", &common::world::base(), 100, 0)
+        .await;
+    for who in ["", alice.as_str()] {
+        let page = w.get("/", who).await.body;
+        assert!(page.contains(r#"<nav class="primary" aria-label="Primary">"#));
+        assert!(
+            page.contains(r#"<nav class="account" aria-label="Account">"#),
+            "{page}"
+        );
+    }
+}

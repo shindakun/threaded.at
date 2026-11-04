@@ -9,7 +9,7 @@
 {% endblock %}
 {% block main %}
 <h1 class="vh">{{ s.title }}</h1>
-<ol class="stories">{% include "story_row.html" %}</ol>
+{% include "story_row.html" %}
 {% if let Some(st) = status %}<p class="mod-status" role="status">{{ st }}</p>{% endif %}
 {% if let Some(l) = lock_note %}<p class="mod-status">{{ l }}</p>{% endif %}
 {% if let Some(e) = bsky_error %}
