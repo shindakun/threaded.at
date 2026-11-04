@@ -44,6 +44,8 @@ pub fn state(
         plc: threaded_web::identity::Plc::Fixed(Default::default()),
         origin: threaded_web::origin::Origin::parse("https://threaded.test").unwrap(),
         bsky: true,
+        // Nor a PDS for blocks: every account blocks no one unless a test says.
+        blocks: threaded_web::blocks::BlockReader::Fixed(Default::default()),
         clock: Arc::new(move || now),
         policy: Default::default(),
         triage_key: false,

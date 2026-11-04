@@ -554,6 +554,15 @@ pub async fn callback(
             st.store
                 .record_sign_in(&si.did, &shown, verified, now())
                 .await?;
+            // Read the account's Bluesky blocks, so they apply from its
+            // first page. In the background: sign-in never waits on a PDS.
+            {
+                let (store, blocks, did) = (st.store.clone(), st.blocks.clone(), si.did.clone());
+                let at = now();
+                tokio::spawn(async move {
+                    crate::blocks::refresh(&store, &blocks, &did, at).await;
+                });
+            }
             // Track the account in hydrant, so its public votes arrive even
             // if it never posts. In the background: sign-in never waits on it.
             if let Some(h) = st.hydrant.clone() {
@@ -594,7 +603,7 @@ pub async fn callback(
 
 #[derive(Deserialize)]
 pub struct CsrfForm {
-    csrf: String,
+    pub(crate) csrf: String,
 }
 
 pub async fn logout(

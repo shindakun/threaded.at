@@ -5,18 +5,20 @@ use crate::{CommentRow, Result, Store, COMMENT_COLUMNS, VISIBLE};
 
 /// Comments that answer user `?1` and that readers can see: not their own,
 /// not deleted, removed, or held, not by an account the network reports
-/// inactive, and on a visible story. `FROM comments c JOIN users u JOIN
+/// inactive or one in a block with the user, and on a visible story. `FROM comments c JOIN users u JOIN
 /// stories s` is assumed.
 fn replies_to() -> String {
     format!(
         "c.user_id <> ?1 AND c.deleted_at IS NULL AND c.removed_at IS NULL \
          AND c.held_at IS NULL AND u.inactive_at IS NULL AND {VISIBLE} \
+         AND NOT {} \
          AND c.id IN (\
            SELECT r.id FROM stories o JOIN comments r ON r.story_id = o.id \
            WHERE o.user_id = ?1 AND r.parent_id IS NULL \
            UNION ALL \
            SELECT r.id FROM comments p JOIN comments r ON r.parent_id = p.id \
-           WHERE p.user_id = ?1)"
+           WHERE p.user_id = ?1)",
+        crate::blocks::blocked_sql("c.user_id", "?1")
     )
 }
 

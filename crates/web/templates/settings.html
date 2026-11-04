@@ -2,7 +2,7 @@
 {% block title %}Settings | {{ site }}{% endblock %}
 {% block main %}
 <h1>Settings</h1>
-{% if let Some(n) = notice %}{% if n == "saved" %}<p class="notice" role="status">Saved.</p>{% else %}<p class="form-error" role="alert">Some records could not be changed on your server. Try again.</p>{% endif %}{% endif %}
+{% if let Some(n) = notice %}{% if n == "saved" %}<p class="notice" role="status">Saved.</p>{% else if n == "blocks" %}<p class="notice" role="status">Your blocks were read again.</p>{% else if n == "blocks-failed" %}<p class="form-error" role="alert">Your blocks could not be read from your server. The blocks read before still apply. Try again later.</p>{% else %}<p class="form-error" role="alert">Some records could not be changed on your server. Try again.</p>{% endif %}{% endif %}
 <h2>Public upvotes</h2>
 <p class="lead">Upvotes are private. Made public, each one is also an <code>at.threaded.vote</code> record in your repo, and your profile lists the stories you liked. Turning this off deletes those records; copies other apps already made are outside Threaded's reach.</p>
 {% if has_vote_scope || public_votes %}
@@ -56,6 +56,13 @@
 </form>
 <h2>Saved and hidden stories</h2>
 <p>Stories you saved are on <a href="/saved">your saved list</a>. Stories you hid are on <a href="/hidden">your hidden list</a>, where you can unhide them.</p>
+<h2 id="blocks">Bluesky blocks</h2>
+<p class="lead">When you block someone on Bluesky, or they block you, neither of you sees the other's stories or comments here while signed in, and neither can reply to the other. Threaded reads your blocks from your server when you sign in, then every hour, or every day after 30 days away. Blocks of whole lists are not read yet.</p>
+<p>{% if let Some(when) = blocks_read %}{{ block_count }} {% if block_count == 1 %}block{% else %}blocks{% endif %}, read {{ when }}.{% else %}Your blocks have not been read yet.{% endif %}</p>
+<form method="post" action="/settings/blocks" class="post-form">
+  <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+  <button type="submit" class="secondary">Read my blocks again</button>
+</form>
 <h2>Keyboard shortcuts</h2>
 <p class="lead">With shortcuts on, <kbd>j</kbd> and <kbd>k</kbd> move to the next and previous story or comment, <kbd>o</kbd> opens the link of the story you are on, and <kbd>Enter</kbd> opens its comments. They are off unless you turn them on, so a stray key press never moves the page, and they do nothing while you type in a form.</p>
 <form method="post" action="/settings/keys" class="post-form">

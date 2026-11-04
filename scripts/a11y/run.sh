@@ -91,6 +91,9 @@ A11Y_COOKIE="$cookie" node "$here/audit.mjs" "$base" / "$mine" "$mine/edit" /sub
   /mod "/mod/s/$sid" /mod/c/"$comment" /mod/u/did:plc:a11yother /moderations /admin /admin/settings /admin/tags /admin/people \
   "/mod?tab=edits" "/s/$theirs/suggest" "/mod?tab=holds" "/mod?tab=suggestions" /admin/rules /moderations/stats \
   "/mod?tab=detached" "/mod/s/$detached"
+# After the audit, since opening the story page marks it read: the page it
+# audited shows a comment from an account in a block as a placeholder.
+curl -fs -H "Cookie: $cookie" "$base$mine" | grep -q 'A comment from an account in a block with you.' || { echo "the story page shows no blocked placeholder"; exit 1; }
 # The page scripts in the browser, as the reader: their upvotes are private,
 # so a vote writes no record.
 node "$here/behavior.mjs" "$base" "$reader" "$mine"

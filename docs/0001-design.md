@@ -677,6 +677,7 @@ in the mod log; settings changes record the old and new value.
 |---|---|
 | Project submissions | `show` + `atproto` tags. A tangled.org repo URL renders a repo card. Any story may link an `at://` URI; its title opens Threaded's page for the record, which lists where the record can be opened, since most records have no single canonical URL. A verified standard.site document links the page its author declared. |
 | Lexicon search | `/lexicons?q=` resolves an NSID through its `_lexicon` DNS record and shows the published schema, with the Threaded stories that mention it. |
+| Bluesky blocks | An `app.bsky.graph.block` record applies both ways. While signed in, neither account sees the other's stories, and neither can open the other's story or profile page or reply to the other. In a thread, the other's comment is a placeholder that names no one, and replies to it by others still show. Signed-out readers, everyone else, and moderation pages see everything. Each account's blocks are read from its PDS at sign-in, then hourly while it is active and daily after 30 days away; `/settings` shows the count and reads them again on request. Block lists (`app.bsky.graph.listblock`) are not read. |
 
 ## 11. Reader features
 

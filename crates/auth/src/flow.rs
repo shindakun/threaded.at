@@ -153,6 +153,21 @@ pub async fn check_handle_of(clients: &Clients, did: &str) -> HandleCheck {
     }
 }
 
+/// The PDS an account's DID document names, if the document resolves.
+pub async fn pds_of(clients: &Clients, did: &str) -> Option<String> {
+    let did = Did::new(SmolStr::new(did)).ok()?;
+    let resp = clients
+        .base()
+        .oauth
+        .client
+        .as_ref()
+        .resolve_did_doc(&did)
+        .await
+        .ok()?;
+    let doc = resp.parse().ok()?;
+    doc.pds_endpoint().map(|u| u.as_str().to_string())
+}
+
 /// Checks a DID's handle both ways: the DID document names it, and it
 /// resolves back to the DID.
 pub async fn check_handle(clients: &Clients, did: &Did) -> HandleCheck {

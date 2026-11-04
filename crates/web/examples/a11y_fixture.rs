@@ -146,6 +146,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             record: None,
         })
         .await?;
+    // A comment by an account that blocks the signed-in user on Bluesky, so
+    // the story page shows its placeholder.
+    let blocker = store
+        .record_sign_in("did:plc:a11yblocker", "blocker.example", true, now)
+        .await?;
+    store
+        .insert_comment(&NewComment {
+            story_id,
+            user_id: blocker,
+            parent_id: None,
+            body: "A comment from an account in a block.",
+            created_at: now - 270,
+            record: None,
+        })
+        .await?;
+    store
+        .replace_blocks(
+            "did:plc:a11yblocker",
+            &[threaded_store::Block {
+                rkey: "3a11yblock".into(),
+                subject_did: did.to_string(),
+            }],
+            now,
+        )
+        .await?;
     // One of the signed-in user's own posts, removed, so their profile lists
     // it under "Hidden from others".
     let mine_removed = store

@@ -130,6 +130,33 @@ fn check_text(text: &str, required: bool) -> Result<(), AppError> {
     Ok(())
 }
 
+// ---------- Bluesky blocks ----------
+
+const BLOCKED_STORY: &str = "This story is by an account in a block with you on Bluesky. \
+     While you are signed in, neither of you sees the other's posts here.";
+const BLOCKED_PROFILE: &str = "This account is in a block with you on Bluesky. \
+     While you are signed in, neither of you sees the other's posts here.";
+const BLOCKED_REPLY: &str = "You cannot reply here: you and its author are in a block on Bluesky.";
+/// The text that stands in for a comment by an account in a block with the
+/// reader.
+pub const BLOCKED_COMMENT: &str = "A comment from an account in a block with you.";
+
+/// Refuses with `why` when the reader and any of `others` are in a block,
+/// in either direction. The reader's own posts never count.
+async fn refuse_blocked(
+    st: &AppState,
+    reader: i64,
+    others: &[i64],
+    why: &'static str,
+) -> Result<(), AppError> {
+    let others: Vec<i64> = others.iter().copied().filter(|&o| o != reader).collect();
+    if st.store.blocked_among(reader, &others).await?.is_empty() {
+        Ok(())
+    } else {
+        Err(AppError::Blocked(why))
+    }
+}
+
 // ---------- story page and comment thread ----------
 
 pub struct CommentView {
@@ -349,6 +376,9 @@ pub async fn story_page(
     if row.hidden() && !is_mine && !is_moderator {
         return Err(AppError::NotFound);
     }
+    if let Some(a) = &a {
+        refuse_blocked(&st, a.user.id, &[row.user_id], BLOCKED_STORY).await?;
+    }
     // Recorded before the row is built, so this page shows nothing as new.
     if let Some(a) = &a {
         st.store.record_read(a.user.id, row.id, now).await?;
@@ -485,26 +515,36 @@ async fn build_thread(
     let commenters: Vec<i64> = comments.iter().map(|c| c.user_id).collect();
     crate::handles::refresh(st, &commenters).await;
     let badges = crate::badge_map(st, &commenters).await?;
+    let blocked = match me {
+        Some(me) => st.store.blocked_among(me, &commenters).await?,
+        None => Default::default(),
+    };
     let mut children: HashMap<Option<i64>, Vec<&CommentRow>> = HashMap::new();
     for c in comments {
         children.entry(c.parent_id).or_default().push(c);
     }
     // Whether this viewer sees the comment itself. A hidden comment shows to
     // its author and to moderators.
+    let is_blocked = |c: &CommentRow| blocked.contains(&c.user_id);
     let shown = |c: &CommentRow| {
-        c.deleted_at.is_none() && (!c.hidden() || is_moderator || me == Some(c.user_id))
+        c.deleted_at.is_none()
+            && !is_blocked(c)
+            && (!c.hidden() || is_moderator || me == Some(c.user_id))
     };
-    // A comment the viewer cannot see stays as a placeholder only while a
-    // reply below it is visible.
+    // A comment by an account in a block with the viewer always shows as a
+    // placeholder, so the viewer knows a comment is there. Any other comment
+    // the viewer cannot see stays as a placeholder only while a reply below
+    // it is visible.
+    let listed = |c: &CommentRow| shown(c) || (is_blocked(c) && c.deleted_at.is_none());
     fn visible(
         c: &CommentRow,
         children: &HashMap<Option<i64>, Vec<&CommentRow>>,
-        shown: &dyn Fn(&CommentRow) -> bool,
+        listed: &dyn Fn(&CommentRow) -> bool,
     ) -> bool {
-        shown(c)
+        listed(c)
             || children
                 .get(&Some(c.id))
-                .is_some_and(|k| k.iter().any(|x| visible(x, children, shown)))
+                .is_some_and(|k| k.iter().any(|x| visible(x, children, listed)))
     }
 
     let mut events = Vec::new();
@@ -516,7 +556,7 @@ async fn build_thread(
             .map(|v| {
                 v.iter()
                     .copied()
-                    .filter(|c| visible(c, &children, &shown))
+                    .filter(|c| visible(c, &children, &listed))
                     .collect()
             })
             .unwrap_or_default();
@@ -534,6 +574,8 @@ async fn build_thread(
         let deleted = c.deleted_at.is_some();
         let placeholder = if deleted {
             Some("[deleted]")
+        } else if is_blocked(c) {
+            Some(BLOCKED_COMMENT)
         } else if !shown(c) {
             Some("[removed]")
         } else {
@@ -556,10 +598,20 @@ async fn build_thread(
         if (locked || c.hidden()) && flag.current.is_none() {
             flag.allowed = false;
         }
+        // The handle of an account in a block with the viewer is not shown,
+        // even in the comment's label.
+        let (handle, badges) = if is_blocked(c) && !deleted {
+            ("an account in a block with you".to_string(), Vec::new())
+        } else {
+            (
+                c.handle.clone(),
+                badges.get(&c.user_id).cloned().unwrap_or_default(),
+            )
+        };
         events.push(ThreadEvent::ItemStart(Box::new(CommentView {
             short_id: c.short_id.clone(),
-            handle: c.handle.clone(),
-            badges: badges.get(&c.user_id).cloned().unwrap_or_default(),
+            handle,
+            badges,
             age: ago(now - c.created_at),
             body_html: if gone {
                 String::new()
@@ -588,7 +640,7 @@ async fn build_thread(
         })));
         let has_kids = children
             .get(&Some(c.id))
-            .is_some_and(|k| k.iter().any(|x| visible(x, &children, &shown)));
+            .is_some_and(|k| k.iter().any(|x| visible(x, &children, &listed)));
         if has_kids {
             events.push(ThreadEvent::ListOpen);
             stack.push((Some(c.id), 0));
@@ -820,6 +872,9 @@ pub async fn comment(
                 .ok_or(AppError::NotFound)?,
         )
     };
+    let mut authors = vec![story.user_id];
+    authors.extend(parent.as_ref().map(|p| p.user_id));
+    refuse_blocked(&st, a.user.id, &authors, BLOCKED_REPLY).await?;
     let input = CommentInput {
         story: &story,
         parent: parent.as_ref(),
@@ -885,10 +940,16 @@ pub async fn reply_page(
         .comment(&short_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    actor(&st, &viewer, &format!("/c/{short_id}/reply")).await?;
+    let a = actor(&st, &viewer, &format!("/c/{short_id}/reply")).await?;
     if c.deleted_at.is_some() {
         return Err(AppError::NotFound);
     }
+    let story = st
+        .store
+        .story_any(&c.story_short_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    refuse_blocked(&st, a.user.id, &[c.user_id, story.user_id], BLOCKED_REPLY).await?;
     Ok(Html(
         ReplyPage {
             site: SITE_NAME,
@@ -1466,6 +1527,10 @@ struct SettingsPage {
     notice: Option<String>,
     /// Every active tag, checked when the reader filters it out.
     tag_filters: Vec<TagChoice>,
+    /// How many Bluesky blocks the reader's account holds, as last read.
+    block_count: i64,
+    /// When they were last read, as "3 hours ago"; none before the first read.
+    blocks_read: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -1488,6 +1553,13 @@ pub async fn settings_page(
     let flow = a.me.session.flow;
     let filtered = st.store.tag_filters(a.user.id).await?;
     let tag_filters = all_tag_choices(&st, &filtered).await?;
+    let now = (st.clock)();
+    let blocks_read = st
+        .store
+        .blocks_read_at(a.user.id)
+        .await?
+        .map(|t| ago(now - t));
+    let block_count = st.store.block_count(&a.user.did).await?;
     Ok(Html(
         SettingsPage {
             site: SITE_NAME,
@@ -1505,6 +1577,8 @@ pub async fn settings_page(
             did: a.user.did.clone(),
             notice: q.notice,
             tag_filters,
+            block_count,
+            blocks_read,
         }
         .render()?,
     ))
@@ -1529,6 +1603,20 @@ pub async fn settings_triage(
         .set_triage_opt_out(a.user.id, f.opt_out.is_some())
         .await?;
     Ok(Redirect::to("/settings?notice=saved").into_response())
+}
+
+/// Reads the reader's Bluesky blocks again now, rather than at the next
+/// refresh.
+pub async fn settings_blocks(
+    State(st): State<AppState>,
+    viewer: Viewer,
+    Form(f): Form<crate::auth::CsrfForm>,
+) -> Result<Response, AppError> {
+    check_csrf(&viewer, &f.csrf)?;
+    let a = actor(&st, &viewer, "/settings").await?;
+    let read = crate::blocks::refresh(&st.store, &st.blocks, &a.user.did, (st.clock)()).await;
+    let notice = if read { "blocks" } else { "blocks-failed" };
+    Ok(Redirect::to(&format!("/settings?notice={notice}#blocks")).into_response())
 }
 
 #[derive(Deserialize)]
@@ -1783,6 +1871,9 @@ pub async fn profile(
         .user_by_handle(&handle)
         .await?
         .ok_or(AppError::NotFound)?;
+    if let Some(me) = &viewer.me {
+        refuse_blocked(&st, me.user_id, &[user.id], BLOCKED_PROFILE).await?;
+    }
     let now = (st.clock)();
     let level = level::level(&user.account(now), &st.policy().thresholds);
     let mut stories: Vec<StoryView> = st

@@ -71,13 +71,15 @@ impl Store {
         if story_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let mut qb = QueryBuilder::<Sqlite>::new(
+        let mut qb = QueryBuilder::<Sqlite>::new(format!(
             "SELECT r.story_id, count(*) FROM story_reads r \
              JOIN comments c ON c.story_id = r.story_id AND c.created_at > r.read_at \
              JOIN users u ON u.id = c.user_id \
              WHERE c.deleted_at IS NULL AND c.removed_at IS NULL AND c.held_at IS NULL \
-             AND u.inactive_at IS NULL AND c.user_id <> r.user_id AND r.user_id = ",
-        );
+             AND u.inactive_at IS NULL AND c.user_id <> r.user_id \
+             AND NOT {} AND r.user_id = ",
+            crate::blocks::blocked_sql("c.user_id", "r.user_id")
+        ));
         qb.push_bind(user_id).push(" AND r.story_id IN (");
         let mut sep = qb.separated(", ");
         for id in story_ids {
@@ -175,7 +177,8 @@ fn push_ids(qb: &mut QueryBuilder<'_, Sqlite>, ids: &[i64]) {
     sep.push_unseparated(")");
 }
 
-/// Leaves out the stories a reader hid and those carrying a tag they filter.
+/// Leaves out the stories a reader hid, those carrying a tag they filter,
+/// and those by an account in a block with them.
 /// `shown` names tags the reader asked for on this page, such as the tag of
 /// `/t/{tag}`: a story is not filtered out for carrying one of those.
 pub(crate) fn push_reader(qb: &mut QueryBuilder<'_, Sqlite>, reader: i64, shown: &[String]) {
@@ -193,4 +196,5 @@ pub(crate) fn push_reader(qb: &mut QueryBuilder<'_, Sqlite>, reader: i64, shown:
         qb.push(" AND ft.name <> ").push_bind(name.clone());
     }
     qb.push(")");
+    crate::blocks::push_not_blocked(qb, "s.user_id", reader);
 }

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 pub mod admin;
 pub mod auth;
+pub mod blocks;
 pub mod blog;
 pub mod crosspost;
 pub mod feed;
@@ -56,12 +57,15 @@ pub struct AppState {
     /// Cross-posting to Bluesky is offered. Only a production build offers
     /// it: a local build would post links to a page no one else can open.
     pub bsky: bool,
+    /// Where Bluesky blocks are read from.
+    pub blocks: blocks::BlockReader,
 }
 
 impl AppState {
     pub fn new(store: Store, blog: Blog, auth: Auth) -> AppState {
         let writer = threaded_auth::records::Writer::Pds(auth.clients.clone());
         let bsky = auth.clients.ns == threaded_auth::client::Namespace::PRODUCTION;
+        let blocks = blocks::BlockReader::network(auth.clients.clone());
         let handles = handles::HandleChecker::Network(auth.clients.clone());
         AppState {
             store,
@@ -82,6 +86,7 @@ impl AppState {
             rules_ready: Default::default(),
             origin: origin::Origin::local(8080),
             bsky,
+            blocks,
         }
     }
 
@@ -193,6 +198,10 @@ pub fn router(state: AppState) -> Router {
         .route("/s/{short_id}/hide", axum::routing::post(write::hide))
         .route("/settings/tags", axum::routing::post(write::settings_tags))
         .route("/settings/keys", axum::routing::post(write::settings_keys))
+        .route(
+            "/settings/blocks",
+            axum::routing::post(write::settings_blocks),
+        )
         .route("/settings/bsky", axum::routing::post(crosspost::settings))
         .route("/s/{short_id}/bsky", axum::routing::post(crosspost::retry))
         .route("/search", get(search_page))
@@ -381,6 +390,9 @@ pub enum AppError {
     SignIn(String),
     /// The request breaks a rule; the message says which.
     Refused(String),
+    /// The page or the reply is between two accounts in a Bluesky block;
+    /// the message says what.
+    Blocked(&'static str),
     /// The user's PDS refused a write.
     Upstream(String),
     Store(threaded_store::Error),
@@ -425,6 +437,7 @@ impl IntoResponse for AppError {
             }
             AppError::NotFound => (StatusCode::NOT_FOUND, "Not found.".to_string()),
             AppError::Denied(m) => (StatusCode::FORBIDDEN, m.to_string()),
+            AppError::Blocked(m) => (StatusCode::FORBIDDEN, m.to_string()),
             AppError::Forbidden => (
                 StatusCode::FORBIDDEN,
                 "That form expired. Go back, reload the page, and try again.".to_string(),

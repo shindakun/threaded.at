@@ -156,7 +156,7 @@ section 12. A file that fails to parse is skipped and the reason is logged.
 | `/submit` | Submit a story |
 | `/comment`, `/vote`, `/flag` | Form targets for comments, upvotes, and flags |
 | `/u/{handle}` | A user's stories, comments, and public upvotes; a DID works too |
-| `/settings` | Public upvotes, cross-posting to Bluesky, tag filters, keyboard shortcuts, and keeping your posts out of AI triage (form targets `/settings/bsky`, `/settings/tags`, `/settings/keys`, `/settings/triage`) |
+| `/settings` | Public upvotes, cross-posting to Bluesky, tag filters, Bluesky blocks, keyboard shortcuts, and keeping your posts out of AI triage (form targets `/settings/bsky`, `/settings/tags`, `/settings/blocks`, `/settings/keys`, `/settings/triage`) |
 | `/inbox` | Comments on your stories and replies to your comments; the header shows the unread count |
 | `/saved`, `/hidden` | Your saved stories and the stories you hid; form targets `/s/{short_id}/save` and `/s/{short_id}/hide` |
 | `/s/{short_id}/suggest` | Suggest a story's title and tags |

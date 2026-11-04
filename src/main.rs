@@ -209,6 +209,14 @@ async fn serve(db: &str) -> Result<(), BoxError> {
     state.plc = threaded_web::identity::Plc::directory_at(plc_url);
     state.set_policy(policy);
 
+    // Bluesky blocks: each account's, read again hourly while it is active
+    // and daily after.
+    tokio::spawn(threaded_web::blocks::run(
+        state.store.clone(),
+        state.blocks.clone(),
+        state.clock.clone(),
+    ));
+
     // Read ribbons for stories past the lock age are no use: they take no
     // new comments. The lock age is read each hour, since admins change it.
     let reads = state.clone();
